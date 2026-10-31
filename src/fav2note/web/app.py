@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import time
@@ -82,9 +83,101 @@ class JobRunner:
         }
 
 
+class Scheduler:
+    """应用内定时：按间隔触发「采集 + 处理增量」。
+
+    只处理未完成的条目，所以天然是增量，不会重复花钱。
+    """
+
+    def __init__(self, config: Config, runner: JobRunner) -> None:
+        self.config = config
+        self.runner = runner
+        self.path = config.data / "schedule.json"
+        self._thread: threading.Thread | None = None
+
+    def read(self) -> dict:
+        if self.path.is_file():
+            try:
+                return json.loads(self.path.read_text(encoding="utf-8"))
+            except ValueError:
+                pass
+        return {"enabled": False, "every_minutes": 180, "last_run": ""}
+
+    def write(self, data: dict) -> dict:
+        current = self.read()
+        current.update(data)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+        return current
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(target=self._loop, daemon=True, name="fav2note-scheduler")
+        self._thread.start()
+
+    def _loop(self) -> None:
+        while True:
+            try:
+                self._tick()
+            except Exception:  # noqa: BLE001
+                pass
+            time.sleep(30)
+
+    def _tick(self) -> None:
+        state = self.read()
+        if not state.get("enabled") or self.runner.running:
+            return
+        every = max(15, int(state.get("every_minutes", 180)))
+        last = state.get("last_run") or ""
+        if last:
+            try:
+                elapsed = (time.time() - time.mktime(time.strptime(last, "%Y-%m-%d %H:%M"))) / 60
+            except ValueError:
+                elapsed = every + 1
+            if elapsed < every:
+                return
+        self.write({"last_run": time.strftime("%Y-%m-%d %H:%M")})
+        self.runner.start("auto", self._job)
+
+    def _job(self, log) -> None:
+        import subprocess
+        import sys
+
+        log("定时任务：开始采集")
+        for source in ("xhs", "douyin"):
+            try:
+                if source == "douyin":
+                    from ..sources.douyin import DouyinSource
+
+                    items = DouyinSource(self.config.cache / "douyin_profile").collect(limit=100)
+                else:
+                    export = self.config.inbox / "fav_all.json"
+                    if not export.is_file():
+                        log("小红书：缺少导出文件，跳过")
+                        continue
+                    from ..sources.xiaohongshu import XiaohongshuSource
+
+                    items = XiaohongshuSource(export).collect()
+                log(f"{source}：{len(items)} 条")
+            except Exception as error:  # noqa: BLE001
+                log(f"{source} 采集失败：{error}")
+
+        cmd = [sys.executable, "-m", "fav2note.cli", "--home", str(self.config.home),
+               "run", "--limit", "20"]
+        proc = subprocess.Popen(cmd, cwd=str(self.config.home), stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="ignore")
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            log(line.rstrip())
+        proc.wait()
+
+
 def create_app(config: Config) -> FastAPI:
     app = FastAPI(title="fav2note", docs_url=None, redoc_url=None)
     runner = JobRunner()
+    scheduler = Scheduler(config, runner)
+    scheduler.start()
 
     def state() -> StateStore:
         return StateStore(config.data / "state.db")
@@ -200,6 +293,18 @@ def create_app(config: Config) -> FastAPI:
             log(f"关联更新：{count} 篇")
 
         return JSONResponse({"started": runner.start("link", job)})
+
+    @app.get("/api/schedule")
+    def get_schedule() -> dict:
+        return scheduler.read()
+
+    @app.post("/api/schedule")
+    def set_schedule(payload: dict) -> dict:
+        data = {
+            "enabled": bool(payload.get("enabled")),
+            "every_minutes": max(15, int(payload.get("every_minutes") or 180)),
+        }
+        return scheduler.write(data)
 
     @app.get("/api/job")
     def job() -> dict:

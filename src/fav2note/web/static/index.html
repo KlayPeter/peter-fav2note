@@ -201,6 +201,18 @@
           </div>
         </div>
         <div class="field">
+          <label>定时更新</label>
+          <div style="flex:1">
+            <div class="row">
+              <input type="checkbox" id="f-sched-enabled" />
+              <span>启用</span>
+              <input type="number" id="f-sched-every" min="15" step="15" style="max-width:100px" />
+              <span class="muted">分钟一次</span>
+            </div>
+            <div class="desc">到点自动采集两个平台并处理未完成条目（增量）。上次：<span id="sched-last" class="muted">—</span></div>
+          </div>
+        </div>
+        <div class="field">
           <label></label>
           <div style="flex:1"><button class="primary" id="btn-save">保存</button></div>
         </div>
@@ -372,12 +384,15 @@ async function loadNotes() {
 }
 
 async function loadSettings() {
-  const data = await api("/api/config");
+  const [data, schedule] = await Promise.all([api("/api/config"), api("/api/schedule")]);
   $("f-base").value = data.base_url || "";
   $("f-model").value = data.model || "";
   $("f-frames-min").value = data.frames_min ?? 3;
   $("f-frames-max").value = data.frames_max ?? 10;
   $("key-state").textContent = data.has_key ? "已配置" : "未配置";
+  $("f-sched-enabled").checked = !!schedule.enabled;
+  $("f-sched-every").value = schedule.every_minutes || 180;
+  $("sched-last").textContent = schedule.last_run || "从未运行";
 }
 
 $("btn-save").onclick = async () => {
@@ -390,7 +405,15 @@ $("btn-save").onclick = async () => {
   };
   try {
     await api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    toast("已保存，重启面板后生效");
+    await api("/api/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: $("f-sched-enabled").checked,
+        every_minutes: Number($("f-sched-every").value) || 180,
+      }),
+    });
+    toast("已保存");
     $("f-key").value = "";
     loadSettings();
   } catch (e) {
