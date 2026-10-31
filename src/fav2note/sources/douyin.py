@@ -39,17 +39,35 @@ class DouyinSource(Source):
         self.profile_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- 登录 ----
-    def login(self) -> None:
-        """打开有头浏览器，用户自己扫码；回车后保存登录态。"""
+    LOGIN_COOKIES = {"sessionid", "sessionid_ss", "sid_tt", "passport_csrf_token"}
+
+    def login(self, timeout: int = 300) -> None:
+        """打开有头浏览器，用户自行扫码；检测到登录态自动保存并关闭。"""
+        import time
+
         sync_playwright = _playwright()
         with sync_playwright() as pw:
             context = pw.chromium.launch_persistent_context(
-                str(self.profile_dir), headless=False, args=["--disable-blink-features=AutomationControlled"]
+                str(self.profile_dir),
+                headless=False,
+                user_agent=UA,
+                args=["--disable-blink-features=AutomationControlled"],
             )
             page = context.pages[0] if context.pages else context.new_page()
             page.goto("https://www.douyin.com/", wait_until="domcontentloaded")
-            print("浏览器已打开，请扫码登录。登录完成后回到这里按回车…")
-            input()
+            print("浏览器已打开，请扫码登录；脚本会自动检测，最多等 5 分钟…")
+
+            deadline = time.time() + timeout
+            logged = False
+            while time.time() < deadline:
+                names = {c.get("name") for c in context.cookies()}
+                if names & {"sessionid", "sessionid_ss", "sid_tt"}:
+                    logged = True
+                    break
+                page.wait_for_timeout(2000)
+
+            print("登录态已保存" if logged else "超时：未检测到登录，可重试")
+            page.wait_for_timeout(1500)
             context.close()
 
     # ---- 采集 ----
@@ -129,7 +147,8 @@ class DouyinSource(Source):
     def fetch(self, item: Item, workdir: Path) -> Media:
         workdir.mkdir(parents=True, exist_ok=True)
         video = None
-        if url := item.extra.get("video_url"):
+        # 图文帖的 video_url 往往是一段背景音乐，别当视频下
+        if item.kind == "video" and (url := item.extra.get("video_url")):
             target = workdir / f"{item.item_id}.mp4"
             self._download(url, target)
             video = target if target.is_file() and target.stat().st_size > 1024 else None

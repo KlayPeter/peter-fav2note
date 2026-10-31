@@ -39,6 +39,19 @@ def parse_srt(text: str) -> list[tuple[int, str]]:
     return segments
 
 
+def load_wav(path: Path, rate: int = 16000):
+    """直接读 16k 单声道 16bit WAV，避免 PyAV 版本差异。"""
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(path), "rb") as handle:
+        if (handle.getframerate(), handle.getnchannels(), handle.getsampwidth()) != (rate, 1, 2):
+            raise ValueError("需要 16kHz / 单声道 / 16bit 的 WAV")
+        raw = handle.readframes(handle.getnframes())
+    return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 class Transcriber:
     """按需加载模型，避免只跑图文时也占显存。"""
 
@@ -72,8 +85,9 @@ class Transcriber:
         extract_audio(self.config, media.video, wav)
 
         model = self._load()
+        audio = load_wav(wav)
         segments, _info = model.transcribe(
-            str(wav), language="zh", beam_size=5, vad_filter=True,
+            audio, language="zh", beam_size=5, vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 500},
         )
 
