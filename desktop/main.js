@@ -1,4 +1,4 @@
-// Electron 外壳：拉起 Python 后端，等端口就绪后加载面板。
+﻿// Electron 外壳：拉起 Python 后端，等端口就绪后加载面板。
 const { app, BrowserWindow, shell, dialog, Tray, Menu, nativeImage } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
@@ -22,7 +22,7 @@ function backendCommand() {
   return { cmd: python, args: ["-m", "fav2note.cli", "--home", path.join(__dirname, ".."), "web", "--port", String(PORT)] };
 }
 
-function waitForServer(timeoutMs = 20000) {
+function waitForServer(timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
     const tick = () => {
