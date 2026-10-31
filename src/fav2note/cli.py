@@ -255,6 +255,11 @@ def cmd_run(args, config: Config) -> int:
         state.set(item.key, item.platform, item.title, "done", note_path=str(path), seconds=cost)
         print(f"    完成 {cost:.0f}s｜截图 {len(frames)}｜{draft.category}｜density={draft.density}")
 
+    if not args.limit and not selected:
+        (config.data / "full_run.json").write_text(
+            __import__("datetime").datetime.now().isoformat(timespec="seconds"), encoding="utf-8"
+        )
+
     if not args.no_link:
         linked = relink(config.vault)
         print(f"关联更新：{linked} 篇")

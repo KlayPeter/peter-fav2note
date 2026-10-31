@@ -101,7 +101,7 @@ class Scheduler:
                 return json.loads(self.path.read_text(encoding="utf-8"))
             except ValueError:
                 pass
-        return {"enabled": False, "every_minutes": 180, "last_run": ""}
+        return {"enabled": False, "every_minutes": 1440, "last_run": ""}
 
     def write(self, data: dict) -> dict:
         current = self.read()
@@ -128,7 +128,10 @@ class Scheduler:
         state = self.read()
         if not state.get("enabled") or self.runner.running:
             return
-        every = max(15, int(state.get("every_minutes", 180)))
+        # 没做过全量就先不做定时，避免只吃到增量
+        if not (self.config.data / "full_run.json").is_file():
+            return
+        every = max(30, int(state.get("every_minutes", 1440)))
         last = state.get("last_run") or ""
         if last:
             try:
@@ -238,7 +241,7 @@ def create_app(config: Config) -> FastAPI:
         return {"notes": found, "total": len(found)}
 
     @app.post("/api/collect")
-    def collect(source: str = "both", limit: int = 100) -> JSONResponse:
+    def collect(source: str = "both", limit: int = 100, payload: dict | None = None) -> JSONResponse:
         from ..sources.douyin import DouyinSource
         from ..sources.xiaohongshu import XiaohongshuSource
 
@@ -246,6 +249,15 @@ def create_app(config: Config) -> FastAPI:
             from ..store.accounts import Accounts
 
             accounts = Accounts(config.data / "accounts.json")
+
+            # 弹窗传来的排除设置：先落盘，采集时立即生效
+            if payload and ("tags" in payload or "prompt" in payload):
+                from ..pipeline.filters import Filters
+
+                saved = Filters(config.data / "filters.json").save(
+                    list(payload.get("tags") or []), str(payload.get("prompt", ""))
+                )
+                log(f"排除设置：{len(saved['tags'])} 个标签" + (f"，提示词 {len(saved['prompt'])} 字" if saved["prompt"] else ""))
             targets = ["xhs", "douyin"] if source == "both" else [source]
             found = []
             for name in targets:
@@ -274,7 +286,20 @@ def create_app(config: Config) -> FastAPI:
                     log(f"小红书：{len(items)} 条")
 
             import json
-            import sqlite3
+
+            # 采集时就按排除标签标记，避免后面处理时白跑
+            from ..pipeline.filters import Filters
+
+            store = Filters(config.data / "filters.json")
+            dropped = 0
+            for item in found:
+                tag = store.excluded(item.title)
+                if tag:
+                    item.extra["verdict"] = "drop"
+                    item.extra["excluded_by"] = tag
+                    dropped += 1
+            if dropped:
+                log(f"按排除标签标记 {dropped} 条（不会进入处理队列）")
 
             # 与既有清单合并，保留处理状态
             existing_path = config.data / "items.json"
@@ -405,7 +430,35 @@ def create_app(config: Config) -> FastAPI:
         if key:
             updates["FAV2NOTE_API_KEY"] = key
         _update_env(config.home / ".env", {k: v for k, v in updates.items() if v})
+
+        # 内存里同步更新，保存后立即生效，不用重启
+        if key:
+            config.api_key = key
+        if updates["FAV2NOTE_BASE_URL"]:
+            config.base_url = updates["FAV2NOTE_BASE_URL"]
+        if updates["FAV2NOTE_MODEL"]:
+            config.model = updates["FAV2NOTE_MODEL"]
+        config.frames_min = int(updates["FAV2NOTE_FRAMES_MIN"])
+        config.frames_max = int(updates["FAV2NOTE_FRAMES_MAX"])
         return {"saved": True}
+
+    @app.get("/api/filters")
+    def get_filters() -> dict:
+        from ..pipeline.filters import DEFAULT_TAGS, TAG_RULES, Filters
+
+        store = Filters(config.data / "filters.json")
+        return {
+            "tags": store.data.get("tags", DEFAULT_TAGS),
+            "prompt": store.data.get("prompt", ""),
+            "all_tags": list(TAG_RULES),
+        }
+
+    @app.post("/api/filters")
+    def set_filters(payload: dict) -> dict:
+        from ..pipeline.filters import Filters
+
+        store = Filters(config.data / "filters.json")
+        return store.save(list(payload.get("tags") or []), str(payload.get("prompt", "")))
 
     @app.post("/api/run")
     def run_pipeline(limit: int = 20, payload: dict | None = None) -> JSONResponse:
