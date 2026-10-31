@@ -188,7 +188,6 @@
       <div class="row" style="margin:12px 0 14px">
         <button id="btn-open-folder">打开文件夹</button>
         <button id="btn-open-obsidian">在 Obsidian 打开</button>
-        <button id="btn-init-vault">初始化 Obsidian 配置</button>
       </div>
       <div class="panel">
         <table>
@@ -579,11 +578,6 @@ $("btn-open-obsidian").onclick = async () => {
     body: JSON.stringify({ target: "obsidian" }),
   });
   toast(res.ok ? "已调用 Obsidian" : res.message);
-};
-
-$("btn-init-vault").onclick = async () => {
-  const res = await api("/api/vault/init", { method: "POST" });
-  toast(res.ok ? "已写入 Obsidian 基础配置" : res.message);
 };
 
 async function loadNotes() {

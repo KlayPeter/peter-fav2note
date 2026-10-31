@@ -382,33 +382,31 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/api/vault/init")
     def init_vault() -> dict:
-        """写入一份适合本项目的 Obsidian 基础配置。"""
+        """仅在配置缺失时补齐，绝不覆盖用户已有的 Obsidian 设置。"""
         import json as _json
 
         vault = config.vault
         obsidian = vault / ".obsidian"
         (obsidian / "plugins").mkdir(parents=True, exist_ok=True)
+        created = []
 
-        app_json = {
-            "attachmentFolderPath": "_attachments",
-            "newLinkFormat": "relative",
-            "useMarkdownLinks": True,
-            "alwaysUpdateLinks": True,
-            "showLineNumber": False,
-        }
-        appearance = {"accentColor": "#2f6f4f", "baseFontSize": 15}
+        app_file = obsidian / "app.json"
+        if not app_file.is_file():
+            app_file.write_text(
+                _json.dumps(
+                    {
+                        "attachmentFolderPath": "_attachments",
+                        "newLinkFormat": "relative",
+                        "useMarkdownLinks": True,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            created.append("app.json")
 
-        (obsidian / "app.json").write_text(_json.dumps(app_json, ensure_ascii=False, indent=2), encoding="utf-8")
-        (obsidian / "appearance.json").write_text(_json.dumps(appearance, ensure_ascii=False, indent=2), encoding="utf-8")
-        (vault / "README.md").write_text(
-            "# 我的知识库\n\n"
-            "由 fav2note 生成。\n\n"
-            "- 按分类归档，平台信息在每篇的 `platform` 字段里\n"
-            "- 搜索 `platform:抖音` 只看某一平台\n"
-            "- 图片在各分类的 `assets/` 下，随笔记一起移动\n",
-            encoding="utf-8",
-        )
-        return {"ok": True, "path": str(obsidian)}
+        return {"ok": True, "path": str(obsidian), "created": created}
 
     @app.post("/api/link")
     def link() -> JSONResponse:
