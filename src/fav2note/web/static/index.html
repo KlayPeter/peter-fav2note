@@ -687,12 +687,25 @@ function refreshAll() {
 async function loadStatus() {
   const data = await api("/api/status");
   const douyin = data.douyin || {};
+  const ago = (stamp) => {
+    if (!stamp) return "";
+    const mins = Math.floor((Date.now() - new Date(stamp.replace(" ", "T")).getTime()) / 60000);
+    if (Number.isNaN(mins)) return "";
+    if (mins < 2) return "刚刚";
+    if (mins < 60) return `${mins} 分钟前`;
+    return `${Math.floor(mins / 60)} 小时前`;
+  };
+  const stale = (stamp) => {
+    if (!stamp) return true;
+    const mins = (Date.now() - new Date(stamp.replace(" ", "T")).getTime()) / 60000;
+    return Number.isNaN(mins) || mins > 120;
+  };
   const dy = douyin.ok
-    ? `<span style="color:var(--accent)">抖音已登录</span>（${escapeHtml(douyin.checked_at || "")}）`
+    ? `<span style="color:var(--accent)">抖音已登录</span>（${ago(douyin.checked_at) || "未知"}${stale(douyin.checked_at) ? "，状态较旧" : ""}）`
     : `<span style="color:var(--warn)">抖音未登录</span>，跑 <code>fav2note login --source douyin</code> 扫码`;
   const xhs = data.xhs || {};
   const xhsText = xhs.ok
-    ? `<span style="color:var(--accent)">小红书已登录</span>（${escapeHtml(xhs.checked_at || "")}）`
+    ? `<span style="color:var(--accent)">小红书已登录</span>（${ago(xhs.checked_at) || "未知"}${stale(xhs.checked_at) ? "，状态较旧" : ""}）`
     : (data.xhs_export
       ? `<span style="color:var(--warn)">小红书未登录</span>，当前用导出文件（${escapeHtml(data.xhs_export_at || "")}）`
       : `<span style="color:var(--warn)">小红书未登录</span>，点「登录小红书」扫码`);

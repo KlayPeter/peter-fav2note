@@ -252,7 +252,14 @@ class DouyinSource(Source):
         # 图文帖的 video_url 往往是一段背景音乐，别当视频下
         if item.kind == "video" and (url := item.extra.get("video_url")):
             target = workdir / f"{item.item_id}.mp4"
-            self._download(url, target)
+            try:
+                self._download(url, target)
+            except Exception:  # noqa: BLE001 直链过期（403）时用浏览器上下文重取
+                print("    [i] 直链失效，改用浏览器会话下载")
+                try:
+                    self._download_with_browser(url, target)
+                except Exception:  # noqa: BLE001
+                    pass
             video = target if target.is_file() and target.stat().st_size > 1024 else None
 
         images = []
@@ -264,7 +271,11 @@ class DouyinSource(Source):
                 self._download(url, target)
                 images.append(target)
             except Exception:  # noqa: BLE001
-                continue
+                try:
+                    self._download_with_browser(url, target)
+                    images.append(target)
+                except Exception:  # noqa: BLE001
+                    continue
         return Media(item=item, workdir=workdir, video=video, images=images)
 
     @staticmethod
@@ -272,3 +283,23 @@ class DouyinSource(Source):
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Referer": "https://www.douyin.com/"})
         with urllib.request.urlopen(req, timeout=120) as resp:
             dest.write_bytes(resp.read())
+
+    def _download_with_browser(self, url: str, dest: Path) -> None:
+        """用带登录态的浏览器请求同一个地址，绕过直链对客户端环境的校验。"""
+        from .douyin import _playwright  # 自身模块，保持路径一致
+
+        sync_playwright = _playwright()
+        with sync_playwright() as pw:
+            context = pw.chromium.launch_persistent_context(
+                str(self.profile_dir), headless=True,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            try:
+                response = context.request.get(
+                    url, headers={"Referer": "https://www.douyin.com/", "User-Agent": UA}, timeout=120000
+                )
+                if response.status != 200:
+                    raise RuntimeError(f"HTTP {response.status}")
+                dest.write_bytes(response.body())
+            finally:
+                context.close()

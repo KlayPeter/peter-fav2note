@@ -71,11 +71,19 @@ def _collect_items(config: Config, source: str, limit: int) -> list[Item]:
 
 
 def _merge_items(config: Config, new_items: list[Item]) -> list[Item]:
-    """与已有清单按 key 合并，保留旧条目的处理状态。"""
+    """与已有清单按 key 合并；已存在的条目会刷新下载地址（抖音直链有时效）。"""
     existing = _load_items(config)
     merged = {item.key: item for item in existing}
     for item in new_items:
-        merged.setdefault(item.key, item)
+        old = merged.get(item.key)
+        if old is None:
+            merged[item.key] = item
+            continue
+        for field in ("video_url", "images", "duration"):
+            if item.extra.get(field):
+                old.extra[field] = item.extra[field]
+        if item.title and item.title != item.item_id:
+            old.title = item.title
     result = list(merged.values())
     _save_items(config, result)
     return result
