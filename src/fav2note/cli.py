@@ -240,6 +240,13 @@ def cmd_web(args, config: Config) -> int:
     return 0
 
 
+def cmd_desktop(args, config: Config) -> int:
+    from .desktop import run
+
+    run(config, port=args.port)
+    return 0
+
+
 def cmd_daemon(args, config: Config) -> int:
     """常驻：定时采集两个平台，再处理队列。"""
     config.ensure_dirs()
@@ -295,6 +302,10 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=7788)
     web.set_defaults(func=cmd_web)
+
+    desktop = subs.add_parser("desktop", help="打开桌面窗口（pywebview）")
+    desktop.add_argument("--port", type=int, default=7788)
+    desktop.set_defaults(func=cmd_desktop)
 
     daemon = subs.add_parser("daemon", help="常驻：定时采集并处理")
     daemon.add_argument("--interval", type=int, default=3600, help="间隔秒数，默认 1 小时")

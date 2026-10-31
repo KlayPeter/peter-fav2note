@@ -6,7 +6,7 @@ import threading
 import time
 import urllib.request
 
-from ..config import Config
+from .config import Config
 
 
 def _wait_ready(port: int, timeout: float = 15.0) -> bool:
