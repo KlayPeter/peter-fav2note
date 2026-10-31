@@ -77,11 +77,14 @@ class DouyinSource(Source):
         # 两个接口都收：listcollection 是主列表，favorite 是旧接口兜底
         primary: list[dict] = []   # /aweme/listcollection/
         secondary: list[dict] = []  # /aweme/favorite/
+        api_url: list[str] = []
 
         def on_response(response):
             url = response.url
             if not any(api in url for api in FAV_APIS):
                 return
+            if FAV_APIS[0] in url and not api_url:
+                api_url.append(url)
             try:
                 data = response.json()
             except Exception:  # noqa: BLE001
@@ -102,17 +105,23 @@ class DouyinSource(Source):
             page.goto(FAV_URL, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)
 
-            last_height, same = 0, 0
-            for _ in range(max_scroll):
-                page.mouse.wheel(0, 2400)
-                page.wait_for_timeout(1200)
-                height = page.evaluate("document.body.scrollHeight")
-                if height == last_height:
-                    same += 1
-                else:
-                    same, last_height = 0, height
-                if same >= 6 or len(primary) + len(secondary) >= limit:
-                    break
+            # 首选：在页面里按 cursor 翻页，能确保抓到全部
+            if api_url:
+                self._paged_fetch(page, api_url[0], primary, limit)
+
+            # 兜底：cursor 方式拿不到东西时再滚动
+            if len(primary) < min(limit, 20):
+                last_height, same = 0, 0
+                for _ in range(max_scroll):
+                    page.mouse.wheel(0, 2400)
+                    page.wait_for_timeout(1200)
+                    height = page.evaluate("document.body.scrollHeight")
+                    if height == last_height:
+                        same += 1
+                    else:
+                        same, last_height = 0, height
+                    if same >= 6 or len(primary) + len(secondary) >= limit:
+                        break
 
             logged_in = "sessionid" in {c.get("name") for c in context.cookies()}
             context.close()
@@ -125,6 +134,52 @@ class DouyinSource(Source):
         if secondary:
             print(f"    收藏接口：主列表 {len(primary)} 条，旧接口 {len(secondary)} 条，去重后 {len(merged)} 条")
         return [self._to_item(aweme) for aweme in merged]
+
+    PAGE_JS = """
+    async ({url, cursor, count}) => {
+      const u = new URL(url);
+      u.searchParams.set('count', String(count));
+      u.searchParams.set('cursor', String(cursor));
+      const r = await fetch(u.toString(), { credentials: 'include' });
+      let j = {};
+      try { j = await r.json(); } catch (e) { return { status: r.status, list: [], has_more: false }; }
+      return {
+        status: r.status,
+        list: j.aweme_list || [],
+        cursor: Number(j.cursor || 0),
+        has_more: Boolean(j.has_more),
+      };
+    }
+    """
+
+    def _paged_fetch(self, page, api_url: str, bucket: list, limit: int, rounds: int = 80) -> None:
+        """在页面上下文里按 cursor 翻页，直到 has_more 为 false。"""
+        cursor = 0
+        seen = {a.get("aweme_id") for a in bucket}
+        for _ in range(rounds):
+            try:
+                result = page.evaluate(self.PAGE_JS, {"url": api_url, "cursor": cursor, "count": 20})
+            except Exception:  # noqa: BLE001
+                return
+            if result.get("status") != 200 or not result.get("list"):
+                return
+
+            added = 0
+            for aweme in result["list"]:
+                aweme_id = aweme.get("aweme_id")
+                if aweme_id and aweme_id not in seen:
+                    seen.add(aweme_id)
+                    bucket.append(aweme)
+                    added += 1
+
+            if len(bucket) >= limit:
+                return
+            if not result.get("has_more"):
+                return
+            if not added:
+                return
+            cursor = int(result.get("cursor") or 0)
+            page.wait_for_timeout(600)
 
     @staticmethod
     def _dedupe(awemes: list[dict]) -> list[dict]:
@@ -154,6 +209,7 @@ class DouyinSource(Source):
             extra={
                 "video_url": video_url,
                 "images": [((img.get("url_list") or [""])[0]) for img in images],
+                "duration": int(((aweme.get("video") or {}).get("duration") or 0) // 1000),
             },
         )
 

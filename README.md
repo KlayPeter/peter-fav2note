@@ -66,9 +66,18 @@ fav2note collect --source xhs    # 只采小红书
 fav2note collect --source douyin # 只采抖音
 ```
 
-结果合并进 `data/items.json`，已处理过的不会被清掉。
+抖音走**游标翻页**（`cursor` 递增到 `has_more=false`），拿的是全部收藏，不是"最近 N 条"；拿不到时自动退回滚动。结果合并进 `data/items.json`，已处理过的不会被清掉。
 
-### 3. 处理
+### 3. 预筛
+
+下载前先过一遍保守规则，免得白下载：
+
+- 时长 < 12 秒（多为引流片段）
+- 标题含「直播 / 带货 / 下单 / 优惠券 / 抽奖」等
+
+命中的直接标 `skipped` 并写下原因，不消耗流量和转写时间。
+
+### 4. 处理
 
 ```bash
 fav2note run --limit 20     # 下载 → 转写 → 提炼 → 入库 → 建链

@@ -16,6 +16,7 @@ from .pipeline.extract import Extractor
 from .pipeline.frames import frames_for_sections
 from .pipeline.link import relink
 from .pipeline.ocr import read_many
+from .pipeline.prefilter import skip_reason
 from .pipeline.transcribe import Transcriber, timed_text
 from .sources.douyin import DouyinSource
 from .sources.xiaohongshu import XiaohongshuSource
@@ -139,6 +140,12 @@ def cmd_run(args, config: Config) -> int:
 
         workdir = config.cache / item.platform / item.item_id
         workdir.mkdir(parents=True, exist_ok=True)
+
+        reason = skip_reason(item)
+        if reason:
+            state.set(item.key, item.platform, item.title, "skipped", error=reason)
+            print(f"    预筛跳过：{reason}")
+            continue
 
         try:
             source = (
