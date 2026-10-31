@@ -111,6 +111,9 @@ def cmd_login(args, config: Config) -> int:
         print("登录态已保存")
         return 0
     ok = XiaohongshuSource(profile_dir=config.cache / "xhs_profile").login()
+    from .store.accounts import Accounts
+
+    Accounts(config.data / "accounts.json").set("xhs", ok, "命令行登录")
     print("登录态已保存" if ok else "登录未完成，登录态未更新")
     return 0 if ok else 1
 
