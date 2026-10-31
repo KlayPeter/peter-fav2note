@@ -88,6 +88,29 @@ class XiaohongshuSource(Source):
             )
         return items
 
+    # ---- 单条链接 ----
+    @classmethod
+    def from_url(cls, url: str) -> Item:
+        """从分享链接构造条目：补全标题、作者、类型、时长。"""
+        match = re.search(r"/(?:explore|discovery/item)/[^/]*?([0-9a-f]{24})", url)
+        if not match:
+            match = re.search(r"([0-9a-f]{24})", url)
+        if not match:
+            raise ValueError("链接里找不到笔记 ID，请确认是小红书作品链接")
+        note_id = match.group(1)
+
+        item = Item(platform=cls.name, item_id=note_id, title=note_id, url=url, kind="video")
+        try:
+            detail = cls(Path("."))._load_note(item)
+        except Exception:  # noqa: BLE001
+            detail = None
+        if detail:
+            item.title = (detail.get("title") or detail.get("desc") or note_id)[:80]
+            item.author = ((detail.get("user") or {}).get("nickname") or "")
+            item.kind = "video" if detail.get("type") == "video" else "image"
+            item.extra["duration"] = int((((detail.get("video") or {}).get("duration")) or 0) / 1000)
+        return item
+
     # ---- 下载 ----
     def fetch(self, item: Item, workdir: Path) -> Media:
         workdir.mkdir(parents=True, exist_ok=True)

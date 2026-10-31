@@ -99,8 +99,26 @@ class Extractor:
             response_format={"type": "json_object"},
             temperature=0.3,
         )
+        self._log_usage(response, item)
         raw = response.choices[0].message.content or "{}"
         return self._parse(raw, item)
+
+    def _log_usage(self, response, item: Item) -> None:
+        """记录每次调用的 token，方便核对成本。"""
+        try:
+            usage = response.usage
+            line = json.dumps({
+                "key": item.key,
+                "in": usage.prompt_tokens,
+                "out": usage.completion_tokens,
+                "total": usage.total_tokens,
+            }, ensure_ascii=False)
+            path = self.config.data / "usage.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        except Exception:  # noqa: BLE001
+            pass
 
     def _parse(self, raw: str, item: Item) -> NoteDraft:
         try:

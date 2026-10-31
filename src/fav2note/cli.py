@@ -296,6 +296,33 @@ def cmd_filter(args, config: Config) -> int:
     return 0
 
 
+def cmd_add(args, config: Config) -> int:
+    """单条链接入库：解析 → 写进清单 → 可选立刻处理。"""
+    url = args.url.strip()
+    try:
+        if "xiaohongshu.com" in url or "xhslink" in url:
+            item = XiaohongshuSource.from_url(url)
+        elif "douyin.com" in url:
+            item = DouyinSource.from_url(url)
+        else:
+            print("只认得小红书、抖音的链接")
+            return 2
+    except Exception as error:  # noqa: BLE001
+        print(f"解析失败：{error}")
+        return 1
+
+    items = _load_items(config)
+    merged = {i.key: i for i in items}
+    merged[item.key] = item
+    _save_items(config, list(merged.values()))
+    print(f"已加入：{item.platform}｜{item.title}")
+
+    if args.run:
+        run_args = argparse.Namespace(limit=0, no_link=False, select=item.key)
+        cmd_run(run_args, config)
+    return 0
+
+
 def cmd_web(args, config: Config) -> int:
     from .web import serve
 
@@ -371,6 +398,11 @@ def build_parser() -> argparse.ArgumentParser:
     filt = subs.add_parser("filter", help="给清单打 keep/drop 标记")
     filt.add_argument("--redo", action="store_true", help="重新分类全部条目")
     filt.set_defaults(func=cmd_filter)
+
+    add = subs.add_parser("add", help="添加单条链接")
+    add.add_argument("url")
+    add.add_argument("--run", action="store_true", help="加入后立刻处理")
+    add.set_defaults(func=cmd_add)
 
     desktop = subs.add_parser("desktop", help="打开桌面窗口（pywebview）")
     desktop.add_argument("--port", type=int, default=7788)

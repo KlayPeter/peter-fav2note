@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.request
 from pathlib import Path
 
@@ -211,6 +212,37 @@ class DouyinSource(Source):
                 "images": [((img.get("url_list") or [""])[0]) for img in images],
                 "duration": int(((aweme.get("video") or {}).get("duration") or 0) // 1000),
             },
+        )
+
+    # ---- 单条链接 ----
+    @classmethod
+    def from_url(cls, url: str, profile_dir: Path | None = None) -> Item:
+        """从分享链接构造条目。标题取页面 title，失败就退回 ID。"""
+        match = re.search(r"/(?:video|note)/(\d+)", url) or re.search(r"modal_id=(\d+)", url)
+        if not match:
+            raise ValueError("链接里找不到作品 ID")
+        aweme_id = match.group(1)
+
+        title = aweme_id
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": UA})
+            with urllib.request.urlopen(request, timeout=20) as resp:
+                html = resp.read().decode("utf-8", "ignore")
+            found = re.search(r"<title[^>]*>(.*?)</title>", html, re.S)
+            if found:
+                text = found.group(1).strip()
+                text = re.sub(r"\s*-\s*抖音.*$", "", text)
+                if text and text != "抖音":
+                    title = text[:80]
+        except Exception:  # noqa: BLE001
+            pass
+
+        return Item(
+            platform=cls.name,
+            item_id=aweme_id,
+            title=title,
+            url=f"https://www.douyin.com/video/{aweme_id}",
+            kind="video",
         )
 
     # ---- 下载 ----

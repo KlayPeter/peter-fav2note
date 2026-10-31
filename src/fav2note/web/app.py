@@ -286,6 +286,31 @@ def create_app(config: Config) -> FastAPI:
         ok = runner.start("collect", job)
         return JSONResponse({"started": ok})
 
+    @app.post("/api/add")
+    def add_link(payload: dict) -> dict:
+        from ..sources.douyin import DouyinSource
+        from ..sources.xiaohongshu import XiaohongshuSource
+
+        url = str(payload.get("url", "")).strip()
+        if not url:
+            return {"ok": False, "message": "链接为空"}
+        try:
+            if "xiaohongshu.com" in url or "xhslink" in url:
+                item = XiaohongshuSource.from_url(url)
+            elif "douyin.com" in url:
+                item = DouyinSource.from_url(url)
+            else:
+                return {"ok": False, "message": "只认得小红书、抖音的链接"}
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "message": f"解析失败：{error}"}
+
+        path = config.data / "items.json"
+        items = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
+        merged = {f"{i['platform']}:{i['item_id']}": i for i in items}
+        merged[item.key] = item.__dict__
+        path.write_text(json.dumps(list(merged.values()), ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"ok": True, "key": item.key, "title": item.title, "platform": item.platform}
+
     @app.post("/api/link")
     def link() -> JSONResponse:
         def job(log):

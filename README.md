@@ -254,3 +254,17 @@ fav2note filter --redo   # 全部重新分类
 ```
 
 规则层先挡明显无营养的（健身、美食、穿搭、带货…），剩下的交给模型判断；`run` 时自动跳过 `drop`。
+
+### 单条链接
+
+```bash
+fav2note add "https://www.xiaohongshu.com/explore/xxxx?xsec_token=..."   # 只加入清单
+fav2note add "https://www.douyin.com/video/123456" --run                 # 加入并立刻处理
+```
+
+面板「采集清单」页也能直接粘贴链接，回车加入。
+
+### 全量还是增量
+
+第一次跑用**全量**：`fav2note run --limit 0`（或面板「处理全部」）。
+之后只需要增量：采集会合并进同一份清单，`run` 只处理状态不是 `done` 的条目，做过的不重复花钱。
