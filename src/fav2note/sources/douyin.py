@@ -108,7 +108,12 @@ class DouyinSource(Source):
                     same, last_height = 0, height
                 if same >= 6 or len(buckets) >= limit:
                     break
+
+            logged_in = "sessionid" in {c.get("name") for c in context.cookies()}
             context.close()
+
+        if not buckets and not logged_in:
+            raise RuntimeError("抖音登录态已失效，请重新执行：fav2note login --source douyin")
 
         return [self._to_item(aweme) for aweme in self._dedupe(buckets)]
 
