@@ -47,10 +47,10 @@ class Vault:
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 
-    def write(self, item: Item, draft: NoteDraft, frames: list[tuple[int, Path]], base: Path) -> Path:
+    def write(self, item: Item, draft: NoteDraft, frames: list[tuple[int, Path]], base: Path | None = None) -> Path:
         path = self.note_path(item, draft.category)
-        asset_root = self.assets_dir(item, draft.category)
-        text = self._render(item, draft, frames, asset_root)
+        self.assets_dir(item, draft.category)
+        text = self._render(item, draft, frames, path.parent)
         path.write_text(text, encoding="utf-8", newline="\n")
         return path
 
@@ -60,7 +60,7 @@ class Vault:
         item: Item,
         draft: NoteDraft,
         frames: list[tuple[int, Path]],
-        asset_root: Path,
+        note_dir: Path,
     ) -> str:
         def bullets(values: list[str], empty: str = "_无_") -> str:
             return "\n".join(f"- {v}" for v in values) if values else empty
@@ -72,8 +72,9 @@ class Vault:
             hits = [f for f in frames if f[0] == index]
             if not hits:
                 return []
-            rel = hits[0][1].relative_to(asset_root.parent.parent.parent).as_posix()
-            return [f"![{item.title[:16]}]({rel})", ""]
+            # 图片相对当前笔记所在目录，Obsidian 直接可渲染
+            rel = hits[0][1].relative_to(note_dir).as_posix()
+            return [f"![{mmss(hits[0][0])}]({rel})", ""]
 
         head = [
             "---",
