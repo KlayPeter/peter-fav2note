@@ -98,6 +98,8 @@ fav2note stats    # 命令行统计
 ```bash
 fav2note link     # 只重建笔记关联
 fav2note stats    # 看处理统计
+python scripts/clean.py --dry-run   # 看能清多少（缓存/重复/丢弃区）
+python scripts/clean.py             # 实际清理
 ```
 
 ## 桌面端
