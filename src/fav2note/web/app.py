@@ -342,6 +342,74 @@ def create_app(config: Config) -> FastAPI:
         path.write_text(json.dumps(list(merged.values()), ensure_ascii=False, indent=2), encoding="utf-8")
         return {"ok": True, "key": item.key, "title": item.title, "platform": item.platform}
 
+    @app.get("/api/vault")
+    def get_vault() -> dict:
+        count = len([p for p in config.vault.rglob("*.md") if "assets" not in p.parts]) if config.vault.is_dir() else 0
+        return {"path": str(config.vault), "notes": count, "exists": config.vault.is_dir()}
+
+    @app.post("/api/vault")
+    def set_vault(payload: dict) -> dict:
+        raw = str(payload.get("path", "")).strip()
+        if not raw:
+            return {"ok": False, "message": "路径为空"}
+        target = Path(raw).expanduser()
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            return {"ok": False, "message": f"无法创建目录：{error}"}
+
+        config.vault_path = str(target.resolve())
+        _update_env(config.home / ".env", {"FAV2NOTE_VAULT": config.vault_path})
+        return {"ok": True, "path": config.vault_path}
+
+    @app.post("/api/open")
+    def open_target(payload: dict) -> dict:
+        """在资源管理器或 Obsidian 中打开知识库。"""
+        import subprocess
+
+        target = str(payload.get("target", "folder"))
+        vault = config.vault
+        vault.mkdir(parents=True, exist_ok=True)
+        try:
+            if target == "folder":
+                subprocess.Popen(["explorer", str(vault)])
+            else:
+                # obsidian://open?vault=<库名>，库名即目录名
+                subprocess.Popen(["cmd", "/c", "start", "", f"obsidian://open?vault={vault.name}"])
+            return {"ok": True}
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "message": str(error)}
+
+    @app.post("/api/vault/init")
+    def init_vault() -> dict:
+        """写入一份适合本项目的 Obsidian 基础配置。"""
+        import json as _json
+
+        vault = config.vault
+        obsidian = vault / ".obsidian"
+        (obsidian / "plugins").mkdir(parents=True, exist_ok=True)
+
+        app_json = {
+            "attachmentFolderPath": "_attachments",
+            "newLinkFormat": "relative",
+            "useMarkdownLinks": True,
+            "alwaysUpdateLinks": True,
+            "showLineNumber": False,
+        }
+        appearance = {"accentColor": "#2f6f4f", "baseFontSize": 15}
+
+        (obsidian / "app.json").write_text(_json.dumps(app_json, ensure_ascii=False, indent=2), encoding="utf-8")
+        (obsidian / "appearance.json").write_text(_json.dumps(appearance, ensure_ascii=False, indent=2), encoding="utf-8")
+        (vault / "README.md").write_text(
+            "# 我的知识库\n\n"
+            "由 fav2note 生成。\n\n"
+            "- 按分类归档，平台信息在每篇的 `platform` 字段里\n"
+            "- 搜索 `platform:抖音` 只看某一平台\n"
+            "- 图片在各分类的 `assets/` 下，随笔记一起移动\n",
+            encoding="utf-8",
+        )
+        return {"ok": True, "path": str(obsidian)}
+
     @app.post("/api/link")
     def link() -> JSONResponse:
         def job(log):

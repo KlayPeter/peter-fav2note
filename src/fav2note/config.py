@@ -41,6 +41,7 @@ class Config:
     ffprobe: str = "ffprobe"
     frames_min: int = 3
     frames_max: int = 10
+    vault_path: str = ""
     platform_dir: bool = True
 
     @classmethod
@@ -64,12 +65,15 @@ class Config:
             ffprobe=get("FAV2NOTE_FFPROBE", "ffprobe"),
             frames_min=int(get("FAV2NOTE_FRAMES_MIN", "3")),
             frames_max=int(get("FAV2NOTE_FRAMES_MAX", "10")),
+            vault_path=get("FAV2NOTE_VAULT", ""),
         )
 
     # ---- 目录 ----
     @property
     def vault(self) -> Path:
-        return self.home / "vault"
+        if self.vault_path:
+            return Path(self.vault_path).expanduser().resolve()
+        return (self.home / "vault").resolve()
 
     @property
     def data(self) -> Path:

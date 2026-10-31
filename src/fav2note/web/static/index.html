@@ -182,6 +182,14 @@
 
     <!-- 笔记库 -->
     <section id="view-notes" class="hidden">
+      <div class="panel" style="padding:10px 14px;font-size:12px;color:var(--sub)">
+        当前知识库：<span id="vault-path">—</span>　共 <span id="vault-count">0</span> 篇
+      </div>
+      <div class="row" style="margin:12px 0 14px">
+        <button id="btn-open-folder">打开文件夹</button>
+        <button id="btn-open-obsidian">在 Obsidian 打开</button>
+        <button id="btn-init-vault">初始化 Obsidian 配置</button>
+      </div>
       <div class="panel">
         <table>
           <thead><tr><th style="width:50%">标题</th><th>平台</th><th>分类</th></tr></thead>
@@ -231,6 +239,16 @@
               <span class="muted">分钟一次（1440 = 一天）</span>
             </div>
             <div class="desc">到点自动采集两个平台并处理未完成条目（增量）。上次：<span id="sched-last" class="muted">—</span></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>知识库路径</label>
+          <div style="flex:1">
+            <div class="row">
+              <input type="text" id="f-vault" placeholder="留空则用项目下的 vault" style="max-width:none;flex:1" />
+              <button id="btn-save-vault">保存路径</button>
+            </div>
+            <div class="desc">笔记和图片都写到这里，选你 Obsidian 库的目录即可。</div>
           </div>
         </div>
         <div class="field">
@@ -300,7 +318,7 @@ function go(view) {
   $("page-title").textContent = TITLES[view];
   renderActions();
   if (view === "items") loadItems();
-  if (view === "notes") loadNotes();
+  if (view === "notes") { loadNotes(); loadVault(); }
   if (view === "settings") loadSettings();
 }
 window.addEventListener("hashchange", () => go(location.hash.slice(1) || "overview"));
@@ -518,6 +536,55 @@ async function loadItems() {
   $("items-hint").textContent = `显示 ${shown.length} / ${data.items.length} 条`;
   $("btn-more-items").classList.toggle("hidden", shown.length >= data.items.length);
 }
+
+async function loadVault() {
+  try {
+    const data = await api("/api/vault");
+    $("vault-path").textContent = data.path;
+    $("vault-count").textContent = data.notes;
+    if (!$("f-vault").value) $("f-vault").value = data.path;
+  } catch (e) {}
+}
+
+$("btn-save-vault").onclick = async () => {
+  const path = $("f-vault").value.trim();
+  try {
+    const res = await api("/api/vault", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    if (!res.ok) return toast(res.message);
+    toast("知识库路径已更新");
+    loadVault();
+    loadNotes();
+  } catch (e) {
+    toast("保存失败：" + e.message);
+  }
+};
+
+$("btn-open-folder").onclick = async () => {
+  const res = await api("/api/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target: "folder" }),
+  });
+  toast(res.ok ? "已打开文件夹" : res.message);
+};
+
+$("btn-open-obsidian").onclick = async () => {
+  const res = await api("/api/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target: "obsidian" }),
+  });
+  toast(res.ok ? "已调用 Obsidian" : res.message);
+};
+
+$("btn-init-vault").onclick = async () => {
+  const res = await api("/api/vault/init", { method: "POST" });
+  toast(res.ok ? "已写入 Obsidian 基础配置" : res.message);
+};
 
 async function loadNotes() {
   const data = await api("/api/notes?limit=500");
