@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from pathlib import Path
@@ -98,8 +99,10 @@ def create_app(config: Config) -> FastAPI:
         notes = [p for p in config.vault.rglob("*.md") if "assets" not in p.parts]
         by_platform: dict[str, int] = {}
         for note in notes:
-            platform = note.relative_to(config.vault).parts[0]
-            by_platform[platform] = by_platform.get(platform, 0) + 1
+            head = note.read_text(encoding="utf-8")[:300]
+            match = re.search(r"^platform:\s*(\S+)", head, re.M)
+            name = match.group(1) if match else "未标注"
+            by_platform[name] = by_platform.get(name, 0) + 1
         return {
             "counts": counts,
             "notes": len(notes),

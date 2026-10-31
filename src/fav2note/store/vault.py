@@ -35,16 +35,16 @@ class Vault:
         self.root = root
 
     def note_path(self, item: Item, category: str) -> Path:
-        folder = self.root / item.platform / safe_name(category, 20)
+        # 顶层按分类分，平台只记在 frontmatter 里
+        folder = self.root / safe_name(category, 20)
         folder.mkdir(parents=True, exist_ok=True)
         base = folder / f"{safe_name(item.title)}.md"
         if not base.exists():
             return base
-        # 同名不同篇：用 id 后缀，避免覆盖
         return folder / f"{safe_name(item.title)} ({item.item_id[-6]}).md"
 
     def assets_dir(self, item: Item, category: str) -> Path:
-        folder = self.root / item.platform / safe_name(category, 20) / ASSETS / slug(item.title)
+        folder = self.root / safe_name(category, 20) / ASSETS / slug(item.title)
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 

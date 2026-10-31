@@ -137,16 +137,23 @@ powershell -ExecutionPolicy Bypass -File scripts\build_desktop.ps1
 
 ## 输出结构
 
+顶层按**分类**归档，平台写在 frontmatter 里（不再按平台分目录）：
+
 ```
 vault/
-├── 小红书/
-│   ├── 技术AI/
-│   │   ├── 用 Skill 让 Gemini 做设计.md
-│   │   └── assets/用_Skill_让_Gemini_做设计/f01.jpg
-│   └── 学习方法/
-└── 抖音/
-    └── 思维认知/
+├── 技术AI/
+│   ├── 用 Skill 让 Gemini 做设计.md
+│   └── assets/用_Skill_让_Gemini_做设计/f01.jpg
+├── 学习方法/
+├── 思维认知/
+├── 职场商业/
+├── 科普知识/
+├── 技能教程/
+├── 习惯自律/
+└── 书影推荐/
 ```
+
+按平台筛选用 Obsidian 搜索：`platform:抖音`。
 
 每篇的 frontmatter：
 
