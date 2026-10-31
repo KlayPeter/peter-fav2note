@@ -119,21 +119,21 @@ class XiaohongshuSource(Source):
             page = context.pages[0] if context.pages else context.new_page()
             page.on("response", on_response)
 
-            user_id = ""
-            try:
-                page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded")
-                page.wait_for_timeout(3000)
-                user_id = page.evaluate(
-                    """async () => {
-                        const r = await fetch('/api/sns/web/v1/user/selfinfo', { credentials: 'include' });
-                        const j = await r.json();
-                        return (j.data && (j.data.user_id || (j.data.basic_info || {}).user_id)) || '';
-                    }"""
-                ) or ""
-            except Exception:  # noqa: BLE001
-                user_id = ""
+            page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded")
+            page.wait_for_timeout(4000)
 
-            url = f"https://www.xiaohongshu.com/user/profile/{user_id}?tab=fav" if user_id else "https://www.xiaohongshu.com/explore"
+            if "website-login/error" in page.url or "error_code=300012" in page.url:
+                context.close()
+                raise RuntimeError(
+                    "小红书风控拦截（IP 风险 300012），请改用导出文件："
+                    "浏览器登录后用油猴脚本导出 fav_all.json 放进 inbox/"
+                )
+
+            html = page.content()
+            match = re.search(r'"userId":"([0-9a-f]{24})"', html)
+            user_id = match.group(1) if match else ""
+
+            url = f"https://www.xiaohongshu.com/user/profile/{user_id}?tab=fav" if user_id else page.url
             page.goto(url, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)
 
