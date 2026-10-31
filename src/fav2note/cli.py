@@ -55,11 +55,15 @@ def _collect_items(config: Config, source: str, limit: int) -> list[Item]:
     """采集单平台；失败返回空列表而不是抛错。"""
     try:
         if source == "xhs":
-            export = config.inbox / "fav_all.json"
-            if not export.is_file():
-                print(f"跳过小红书：{export} 不存在")
-                return []
-            return XiaohongshuSource(export).collect()
+            xhs = XiaohongshuSource(config.inbox / "fav_all.json", config.cache / "xhs_profile")
+            try:
+                items = xhs.collect(limit=limit)
+            except Exception as error:  # noqa: BLE001
+                print(f"浏览器采集失败（{error}），改用导出文件")
+                items = xhs.collect_from_file()
+            if not items:
+                items = xhs.collect_from_file()
+            return items
         return DouyinSource(config.cache / "douyin_profile").collect(limit=limit)
     except Exception as error:  # noqa: BLE001
         print(f"{source} 采集失败：{error}")
@@ -106,7 +110,8 @@ def cmd_login(args, config: Config) -> int:
         DouyinSource(config.cache / "douyin_profile").login()
         print("登录态已保存")
         return 0
-    print("小红书不需要单独登录：用浏览器登录后导出收藏 JSON 即可")
+    XiaohongshuSource(profile_dir=config.cache / "xhs_profile").login()
+    print("登录态已保存")
     return 0
 
 

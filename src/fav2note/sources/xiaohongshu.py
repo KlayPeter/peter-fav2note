@@ -58,14 +58,106 @@ def _walk_notes(node, out: list) -> None:
 class XiaohongshuSource(Source):
     name = "小红书"
 
-    def __init__(self, export_file: Path) -> None:
-        self.export_file = Path(export_file)
+    def __init__(self, export_file: Path | None = None, profile_dir: Path | None = None) -> None:
+        self.export_file = Path(export_file) if export_file else None
+        self.profile_dir = Path(profile_dir) if profile_dir else Path("data/cache/xhs_profile")
 
-    def collect(self, **kwargs) -> list[Item]:
-        raw = json.loads(self.export_file.read_text(encoding="utf-8", errors="ignore"))
+    # ---- 登录 ----
+    def login(self, timeout: int = 300) -> None:
+        """打开浏览器扫码；检测到 web_session 就保存退出。"""
+        import time
+
+        from .douyin import _playwright
+
+        sync_playwright = _playwright()
+        self.profile_dir.mkdir(parents=True, exist_ok=True)
+        with sync_playwright() as pw:
+            context = pw.chromium.launch_persistent_context(
+                str(self.profile_dir), headless=False,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            page = context.pages[0] if context.pages else context.new_page()
+            page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded")
+            print("浏览器已打开，请扫码登录；脚本会自动检测，最多等 5 分钟…")
+
+            deadline = time.time() + timeout
+            logged = False
+            while time.time() < deadline:
+                names = {c.get("name") for c in context.cookies()}
+                if "web_session" in names:
+                    logged = True
+                    break
+                page.wait_for_timeout(2000)
+            print("登录态已保存" if logged else "超时：未检测到登录")
+            page.wait_for_timeout(1000)
+            context.close()
+
+    # ---- 浏览器采集 ----
+    def collect(self, limit: int = 500, max_scroll: int = 200, **kwargs) -> list[Item]:
+        """驱动浏览器打开自己的收藏页，边滚边截接口响应。"""
+        from .douyin import _playwright
+
+        sync_playwright = _playwright()
         notes: list[dict] = []
-        _walk_notes(raw, notes)
 
+        def on_response(response):
+            if "/api/sns/web/" not in response.url:
+                return
+            try:
+                data = response.json()
+            except Exception:  # noqa: BLE001
+                return
+            payload = data.get("data") if isinstance(data, dict) else None
+            if isinstance(payload, dict) and isinstance(payload.get("notes"), list):
+                notes.extend(n for n in payload["notes"] if isinstance(n, dict))
+
+        with sync_playwright() as pw:
+            context = pw.chromium.launch_persistent_context(
+                str(self.profile_dir), headless=True,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            page = context.pages[0] if context.pages else context.new_page()
+            page.on("response", on_response)
+
+            user_id = ""
+            try:
+                page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded")
+                page.wait_for_timeout(3000)
+                user_id = page.evaluate(
+                    """async () => {
+                        const r = await fetch('/api/sns/web/v1/user/selfinfo', { credentials: 'include' });
+                        const j = await r.json();
+                        return (j.data && (j.data.user_id || (j.data.basic_info || {}).user_id)) || '';
+                    }"""
+                ) or ""
+            except Exception:  # noqa: BLE001
+                user_id = ""
+
+            url = f"https://www.xiaohongshu.com/user/profile/{user_id}?tab=fav" if user_id else "https://www.xiaohongshu.com/explore"
+            page.goto(url, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+
+            last_height, same = 0, 0
+            for _ in range(max_scroll):
+                page.mouse.wheel(0, 2600)
+                page.wait_for_timeout(1300)
+                height = page.evaluate("document.body.scrollHeight")
+                if height == last_height:
+                    same += 1
+                else:
+                    same, last_height = 0, height
+                if same >= 8 or len(notes) >= limit:
+                    break
+
+            logged_in = "web_session" in {c.get("name") for c in context.cookies()}
+            context.close()
+
+        if not notes and not logged_in:
+            raise RuntimeError("小红书登录态已失效，请重新执行：fav2note login --source xhs")
+
+        return self._notes_to_items(notes)
+
+    def _notes_to_items(self, notes: list[dict]) -> list[Item]:
         items: list[Item] = []
         seen: set[str] = set()
         for note in notes:
@@ -87,6 +179,15 @@ class XiaohongshuSource(Source):
                 )
             )
         return items
+
+    def collect_from_file(self) -> list[Item]:
+        """兜底：从浏览器导出的 JSON 读。"""
+        if not self.export_file or not self.export_file.is_file():
+            return []
+        raw = json.loads(self.export_file.read_text(encoding="utf-8", errors="ignore"))
+        notes: list[dict] = []
+        _walk_notes(raw, notes)
+        return self._notes_to_items(notes)
 
     # ---- 单条链接 ----
     @classmethod

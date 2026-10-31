@@ -259,11 +259,17 @@ def create_app(config: Config) -> FastAPI:
                         accounts.set("douyin", False, str(error)[:120])
                         log(f"抖音失败：{error}")
                 else:
-                    export = config.inbox / "fav_all.json"
-                    if not export.is_file():
-                        log(f"小红书：没找到 {export}，先用油猴脚本导出")
-                        continue
-                    items = XiaohongshuSource(export).collect()
+                    xhs = XiaohongshuSource(config.inbox / "fav_all.json", config.cache / "xhs_profile")
+                    try:
+                        items = xhs.collect(limit=limit)
+                        accounts.set("xhs", True, f"{len(items)} 条")
+                    except Exception as error:  # noqa: BLE001
+                        accounts.set("xhs", False, str(error)[:120])
+                        log(f"小红书浏览器采集失败：{error}")
+                        items = xhs.collect_from_file()
+                        if not items:
+                            log("小红书：没有导出文件可用，先在浏览器导出 fav_all.json")
+                            continue
                     found += items
                     log(f"小红书：{len(items)} 条")
 
@@ -353,6 +359,7 @@ def create_app(config: Config) -> FastAPI:
         export = config.inbox / "fav_all.json"
         return {
             "douyin": store.get("douyin"),
+            "xhs": store.get("xhs"),
             "xhs_export": export.is_file(),
             "xhs_export_at": (
                 __import__("datetime").datetime.fromtimestamp(export.stat().st_mtime).strftime("%m-%d %H:%M")
@@ -360,6 +367,27 @@ def create_app(config: Config) -> FastAPI:
                 else ""
             ),
         }
+
+    @app.post("/api/login")
+    def login(source: str = "douyin") -> JSONResponse:
+        from ..sources.douyin import DouyinSource
+        from ..sources.xiaohongshu import XiaohongshuSource
+        from ..store.accounts import Accounts
+
+        def job(log):
+            accounts = Accounts(config.data / "accounts.json")
+            try:
+                if source == "douyin":
+                    DouyinSource(config.cache / "douyin_profile").login()
+                else:
+                    XiaohongshuSource(profile_dir=config.cache / "xhs_profile").login()
+                accounts.set(source, True, "面板内登录")
+                log(f"{source} 登录完成")
+            except Exception as error:  # noqa: BLE001
+                accounts.set(source, False, str(error)[:120])
+                log(f"{source} 登录失败：{error}")
+
+        return JSONResponse({"started": runner.start("login", job)})
 
     @app.post("/api/config")
     def set_config(payload: dict) -> dict:
