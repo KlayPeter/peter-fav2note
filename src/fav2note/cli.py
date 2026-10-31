@@ -104,7 +104,8 @@ def cmd_run(args, config: Config) -> int:
     transcriber = Transcriber(config)
     extractor = Extractor(config)
 
-    todo = [i for i in items if state.status(i.key) not in {"done", "skip", "image_only"}]
+    # 只有 done 是终态：历史遗留的 image_only / skip 也应重新尝试
+    todo = [i for i in items if state.status(i.key) != "done"]
     if args.limit:
         todo = todo[: args.limit]
     print(f"待处理 {len(todo)} 条 / 共 {len(items)} 条")
