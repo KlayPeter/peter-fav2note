@@ -36,6 +36,7 @@
                               "target":  [
                                              "nsis"
                                          ],
+                              "icon":  "../assets/icon.ico",
                               "signAndEditExecutable":  false
                           },
                   "nsis":  {
@@ -43,5 +44,6 @@
                                "allowToChangeInstallationDirectory":  true,
                                "createDesktopShortcut":  true
                            }
-              }
+              },
+    "author":  "KlayPeter"
 }
