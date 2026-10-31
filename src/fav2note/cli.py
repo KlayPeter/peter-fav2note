@@ -166,6 +166,14 @@ def cmd_stats(args, config: Config) -> int:
     return 0
 
 
+def cmd_web(args, config: Config) -> int:
+    from .web import serve
+
+    print(f"面板已启动：http://{args.host}:{args.port}")
+    serve(config, host=args.host, port=args.port)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fav2note", description="收藏转知识库")
     parser.add_argument("--home", default=".", help="工作目录（默认当前目录）")
@@ -193,6 +201,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     stats = subs.add_parser("stats", help="查看处理统计")
     stats.set_defaults(func=cmd_stats)
+
+    web = subs.add_parser("web", help="启动本地面板")
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=7788)
+    web.set_defaults(func=cmd_web)
     return parser
 
 

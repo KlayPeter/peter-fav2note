@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>fav2note</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --surface: #ffffff;
+    --line: #e6e6e3;
+    --ink: #191918;
+    --muted: #6f6f6b;
+    --accent: #2f6f4f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 28px; border-bottom: 1px solid var(--line); background: var(--surface);
+    position: sticky; top: 0; z-index: 10;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .3px; }
+  h1 span { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  .actions { display: flex; gap: 8px; }
+  button {
+    font: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  }
+  button:hover { border-color: #cfcfca; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  main { padding: 24px 28px 60px; max-width: 1080px; margin: 0 auto; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .card .k { color: var(--muted); font-size: 12px; }
+  .card .v { font-size: 22px; font-weight: 600; margin-top: 4px; }
+  section { margin-bottom: 28px; }
+  section h2 {
+    font-size: 13px; font-weight: 600; color: var(--muted);
+    margin: 0 0 10px; text-transform: uppercase; letter-spacing: .6px;
+  }
+  table { width: 100%; border-collapse: collapse; background: var(--surface);
+          border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  th { color: var(--muted); font-weight: 500; background: #fafaf8; }
+  tr:last-child td { border-bottom: none; }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .tag.done { color: var(--accent); border-color: #cfe3d8; background: #f2f8f4; }
+  .tag.failed { color: #a33b2b; border-color: #efd8d3; background: #fdf4f2; }
+  .log {
+    background: #1b1b1a; color: #d8d8d2; border-radius: 10px; padding: 14px 16px;
+    font: 12px/1.7 ui-monospace, "Cascadia Code", Consolas, monospace;
+    max-height: 220px; overflow: auto; white-space: pre-wrap;
+  }
+  .empty { color: var(--muted); padding: 18px; text-align: center; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>fav2note<span>收藏转知识库</span></h1>
+  <div class="actions">
+    <button id="btn-collect">采集抖音</button>
+    <button id="btn-link">重建关联</button>
+    <button class="primary" id="btn-refresh">刷新</button>
+  </div>
+</header>
+
+<main>
+  <div class="stats">
+    <div class="card"><div class="k">知识库笔记</div><div class="v" id="s-notes">-</div></div>
+    <div class="card"><div class="k">已处理</div><div class="v" id="s-done">-</div></div>
+    <div class="card"><div class="k">失败</div><div class="v" id="s-failed">-</div></div>
+    <div class="card"><div class="k">待处理</div><div class="v" id="s-pending">-</div></div>
+  </div>
+
+  <section>
+    <h2>最近笔记</h2>
+    <table>
+      <thead><tr><th style="width:42%">标题</th><th>平台</th><th>分类</th></tr></thead>
+      <tbody id="notes"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>任务日志</h2>
+    <div class="log" id="log">空闲中</div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function json(url, options) {
+  const res = await fetch(url, options);
+  return res.json();
+}
+
+async function refresh() {
+  const [summary, notes, job] = await Promise.all([
+    json("/api/summary"), json("/api/notes?limit=30"), json("/api/job"),
+  ]);
+  $("s-notes").textContent = summary.notes;
+  $("s-done").textContent = summary.counts.done || 0;
+  $("s-failed").textContent = summary.counts.failed || 0;
+  $("s-pending").textContent = summary.counts.pending || 0;
+
+  const tbody = $("notes");
+  tbody.innerHTML = notes.notes.length
+    ? notes.notes.map((n) => `<tr><td>${escapeHtml(n.title)}</td><td>${escapeHtml(n.platform)}</td><td>${escapeHtml(n.category)}</td></tr>`).join("")
+    : '<tr><td colspan="3" class="empty">还没有笔记</td></tr>';
+
+  $("log").textContent = job.log && job.log.length ? job.log.join("\n") : "空闲中";
+  $("btn-collect").disabled = job.running;
+  $("btn-link").disabled = job.running;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+$("btn-collect").onclick = async () => {
+  await json("/api/collect?source=douyin&limit=100", { method: "POST" });
+  refresh();
+};
+$("btn-link").onclick = async () => {
+  await json("/api/link", { method: "POST" });
+  refresh();
+};
+$("btn-refresh").onclick = refresh;
+
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
