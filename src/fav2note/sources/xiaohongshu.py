@@ -112,8 +112,9 @@ class XiaohongshuSource(Source):
                 notes.extend(n for n in payload["notes"] if isinstance(n, dict))
 
         with sync_playwright() as pw:
+            # 小红书会拦无头浏览器（error 300012），必须用有头模式
             context = pw.chromium.launch_persistent_context(
-                str(self.profile_dir), headless=True,
+                str(self.profile_dir), headless=False,
                 args=["--disable-blink-features=AutomationControlled"],
             )
             page = context.pages[0] if context.pages else context.new_page()
@@ -154,6 +155,11 @@ class XiaohongshuSource(Source):
 
         if not notes and not logged_in:
             raise RuntimeError("小红书登录态已失效，请重新执行：fav2note login --source xhs")
+        if not notes:
+            raise RuntimeError(
+                "小红书收藏页没有加载出列表（自动化环境被限制），"
+                "请改用导出文件：浏览器里用油猴脚本导出 fav_all.json 放进 inbox/"
+            )
 
         return self._notes_to_items(notes)
 
