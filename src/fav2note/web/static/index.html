@@ -501,9 +501,11 @@ async function loadStatus() {
     ? `<span style="color:var(--accent)">抖音已登录</span>（${escapeHtml(douyin.checked_at || "")}）`
     : `<span style="color:var(--warn)">抖音未登录</span>，跑 <code>fav2note login --source douyin</code> 扫码`;
   const xhs = data.xhs_export
-    ? `<span style="color:var(--accent)">小红书导出文件已就绪</span>`
+    ? `<span style="color:var(--accent)">小红书导出就绪</span>（${escapeHtml(data.xhs_export_at || "")}）`
     : `<span style="color:var(--warn)">小红书缺少导出文件</span>，用油猴脚本导出 fav_all.json 放进 inbox/`;
-  $("account-tip").innerHTML = `${dy}　·　${xhs}`;
+  $("account-tip").innerHTML =
+    `${dy}　·　${xhs}` +
+    '<div style="margin-top:6px;color:#9a9a94">小红书不需要把账号交给程序：登录在浏览器里完成，程序只读导出文件。</div>';
 }
 
 go(location.hash.slice(1) || "overview");

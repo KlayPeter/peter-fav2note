@@ -350,10 +350,15 @@ def create_app(config: Config) -> FastAPI:
         from ..store.accounts import Accounts
 
         store = Accounts(config.data / "accounts.json")
-        douyin = store.get("douyin")
+        export = config.inbox / "fav_all.json"
         return {
-            "douyin": douyin,
-            "xhs_export": (config.inbox / "fav_all.json").is_file(),
+            "douyin": store.get("douyin"),
+            "xhs_export": export.is_file(),
+            "xhs_export_at": (
+                __import__("datetime").datetime.fromtimestamp(export.stat().st_mtime).strftime("%m-%d %H:%M")
+                if export.is_file()
+                else ""
+            ),
         }
 
     @app.post("/api/config")
