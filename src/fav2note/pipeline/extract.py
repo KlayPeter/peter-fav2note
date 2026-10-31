@@ -71,6 +71,28 @@ class Extractor:
             f"类型：{item.kind}\n点赞：{item.liked}\n\n"
             f"带时间码的逐字稿：\n{transcript.text}\n\n{SCHEMA}"
         )
+        return self._request(prompt, item)
+
+    def run_from_text(self, item: Item, text: str, note_kind: str = "图文") -> NoteDraft:
+        """没有语音时走这条：用 OCR 出来的文字，实在没有就只靠标题。"""
+        body = (
+            f"标题：{item.title}\n作者：{item.author}\n平台：{item.platform}\n"
+            f"类型：{note_kind}\n点赞：{item.liked}\n\n"
+        )
+        if text.strip():
+            body += (
+                "这条没有语音，下面是从图片里 OCR 出来的文字，可能断行错乱，"
+                "请按上下文理解后提炼：\n\n" + text.strip()
+            )
+        else:
+            body += (
+                "这条没有语音，也没有识别到可读文字。只根据标题给出一份克制的笔记："
+                "summary 说明它大概在讲什么、适合谁；sections 给空数组；"
+                "how_to 与 takeaways 尽量为空，不要编造具体步骤。"
+            )
+        return self._request(body + "\n\n" + SCHEMA, item)
+
+    def _request(self, prompt: str, item: Item) -> NoteDraft:
         response = self.client.chat.completions.create(
             model=self.config.model,
             messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}],

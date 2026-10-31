@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -47,8 +48,35 @@ class Vault:
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 
+    def save_images(self, item: Item, category: str, images: list[Path]) -> list[tuple[int, Path]]:
+        """把下载的图片复制进 assets，返回 (序号, 目标路径) 供渲染用。"""
+        dest = self.assets_dir(item, category)
+        saved: list[tuple[int, Path]] = []
+        for index, source in enumerate(images, start=1):
+            suffix = source.suffix.lower() or ".jpg"
+            target = dest / f"img{index:02d}{suffix}"
+            try:
+                shutil.copy2(source, target)
+            except OSError:
+                continue
+            saved.append((index - 1, target))
+        return saved
+
+    def find_by_source(self, item: Item) -> Path | None:
+        """同一篇内容重复处理时，覆盖原文件而不是生成 (2)(3)。"""
+        for path in self.root.rglob("*.md"):
+            if "assets" in path.parts:
+                continue
+            try:
+                head = path.read_text(encoding="utf-8")[:400]
+            except OSError:
+                continue
+            if f"source_id: {item.item_id}" in head:
+                return path
+        return None
+
     def write(self, item: Item, draft: NoteDraft, frames: list[tuple[int, Path]], base: Path | None = None) -> Path:
-        path = self.note_path(item, draft.category)
+        path = self.find_by_source(item) or self.note_path(item, draft.category)
         self.assets_dir(item, draft.category)
         text = self._render(item, draft, frames, path.parent)
         path.write_text(text, encoding="utf-8", newline="\n")
@@ -108,6 +136,19 @@ class Vault:
             body.append(bullets([str(p) for p in section.get("points", [])]))
             body.append("")
             body.extend(frame_for(index))
+
+        # 图文或无解说视频：没有分节时，把图直接铺出来
+        if not draft.sections and frames:
+            body += ["## 图文内容", ""]
+            for _, path in frames:
+                rel = path.relative_to(note_dir).as_posix()
+                body += [f"![]({rel})", ""]
+        elif frames and len(frames) > len(draft.sections):
+            # 分节比图少时，把剩下的图补在最后，别丢
+            body += ["## 更多画面", ""]
+            for _, path in frames[len(draft.sections):]:
+                rel = path.relative_to(note_dir).as_posix()
+                body += [f"![]({rel})", ""]
 
         if draft.steps:
             body += ["## 照着做", "", bullets(draft.steps), ""]

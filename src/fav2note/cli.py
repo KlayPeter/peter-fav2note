@@ -15,6 +15,7 @@ from .models import Item
 from .pipeline.extract import Extractor
 from .pipeline.frames import frames_for_sections
 from .pipeline.link import relink
+from .pipeline.ocr import read_many
 from .pipeline.transcribe import Transcriber, timed_text
 from .sources.douyin import DouyinSource
 from .sources.xiaohongshu import XiaohongshuSource
@@ -142,8 +143,19 @@ def cmd_run(args, config: Config) -> int:
             continue
 
         if not media.has_video:
-            state.set(item.key, item.platform, item.title, "image_only")
-            print("    纯图文，暂不处理")
+            # 图文：OCR 出图上的字，交给模型写摘要，图片照样入库
+            text = read_many(media.images) if media.images else ""
+            try:
+                draft = extractor.run_from_text(item, text, "图文")
+            except Exception as error:  # noqa: BLE001
+                state.set(item.key, item.platform, item.title, "failed", error=str(error))
+                print(f"    提炼失败：{error}")
+                continue
+            images = vault.save_images(item, draft.category, media.images)
+            path = vault.write(item, draft, images, vault.root)
+            cost = time.perf_counter() - started
+            state.set(item.key, item.platform, item.title, "done", note_path=str(path), seconds=cost)
+            print(f"    完成 {cost:.0f}s｜图文 {len(images)} 张｜OCR {len(text)} 字｜{draft.category}")
             continue
 
         try:
@@ -154,8 +166,24 @@ def cmd_run(args, config: Config) -> int:
             continue
 
         if len(transcript.segments) < 3:
-            state.set(item.key, item.platform, item.title, "skip", error="逐字稿过短")
-            print("    跳过：几乎没有人声")
+            # 没有解说：抽帧 + OCR，仍然成篇，不丢弃
+            print("    无解说，改用画面文字生成笔记")
+            raw_frames = frames_for_sections(
+                config, media.video, [], media.workdir / "frames", limit=config.frames_per_note
+            )
+            frames_only = [path for _, path in raw_frames]
+            text = read_many(frames_only) if frames_only else ""
+            try:
+                draft = extractor.run_from_text(item, text, "无解说视频")
+            except Exception as error:  # noqa: BLE001
+                state.set(item.key, item.platform, item.title, "failed", error=str(error))
+                print(f"    提炼失败：{error}")
+                continue
+            images = vault.save_images(item, draft.category, frames_only)
+            path = vault.write(item, draft, images, vault.root)
+            cost = time.perf_counter() - started
+            state.set(item.key, item.platform, item.title, "done", note_path=str(path), seconds=cost)
+            print(f"    完成 {cost:.0f}s｜画面 {len(images)} 张｜OCR {len(text)} 字｜{draft.category}")
             continue
 
         item.extra["timed_text"] = timed_text(transcript.segments)
