@@ -245,3 +245,12 @@ powershell -ExecutionPolicy Bypass -File scripts\build_desktop.ps1
 ## License
 
 [MIT](LICENSE) © 2026 KlayPeter
+
+## 分类
+
+```bash
+fav2note filter          # 给清单打 keep/drop，只处理没有标记的
+fav2note filter --redo   # 全部重新分类
+```
+
+规则层先挡明显无营养的（健身、美食、穿搭、带货…），剩下的交给模型判断；`run` 时自动跳过 `drop`。

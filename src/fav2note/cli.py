@@ -147,6 +147,11 @@ def cmd_run(args, config: Config) -> int:
             print(f"    预筛跳过：{reason}")
             continue
 
+        if item.extra.get("verdict") == "drop":
+            state.set(item.key, item.platform, item.title, "skipped", error="分类判断与自我提升无关")
+            print("    分类跳过：与自我提升无关")
+            continue
+
         try:
             source = (
                 DouyinSource(config.cache / "douyin_profile")
@@ -174,6 +179,10 @@ def cmd_run(args, config: Config) -> int:
         if not media.has_video:
             # 图文：OCR 出图上的字，交给模型写摘要，图片照样入库
             text = read_many(media.images) if media.images else ""
+            if not media.images and not text:
+                state.set(item.key, item.platform, item.title, "failed", error="没有可用素材")
+                print("    跳过：既没有图，也没有可读文字")
+                continue
             try:
                 draft = extractor.run_from_text(item, text, "图文")
             except Exception as error:  # noqa: BLE001
@@ -203,6 +212,10 @@ def cmd_run(args, config: Config) -> int:
             )
             frames_only = [path for _, path in raw_frames]
             text = read_many(frames_only) if frames_only else ""
+            if not frames_only and not text:
+                state.set(item.key, item.platform, item.title, "failed", error="既无解说也无法抽帧")
+                print("    跳过：没有解说，也抽不到画面")
+                continue
             try:
                 draft = extractor.run_from_text(item, text, "无解说视频")
             except Exception as error:  # noqa: BLE001
@@ -259,6 +272,27 @@ def cmd_stats(args, config: Config) -> int:
         print(f"{status:<12}{count}")
     notes = [p for p in config.vault.rglob("*.md") if "assets" not in p.parts]
     print(f"\n知识库笔记：{len(notes)} 篇")
+    return 0
+
+
+def cmd_filter(args, config: Config) -> int:
+    """给清单打 keep/drop 标记，run 时会跳过 drop。"""
+    from .pipeline.classify import classify
+
+    items = _load_items(config)
+    if not items:
+        print("清单为空，先跑 fav2note collect")
+        return 1
+
+    results = classify(items, config, redo=args.redo)
+    for item in items:
+        if item.key in results:
+            item.extra["verdict"] = results[item.key]
+    _save_items(config, items)
+
+    keep = sum(1 for i in items if i.extra.get("verdict") == "keep")
+    drop = sum(1 for i in items if i.extra.get("verdict") == "drop")
+    print(f"分类完成：保留 {keep} 条，剔除 {drop} 条")
     return 0
 
 
@@ -333,6 +367,10 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=7788)
     web.set_defaults(func=cmd_web)
+
+    filt = subs.add_parser("filter", help="给清单打 keep/drop 标记")
+    filt.add_argument("--redo", action="store_true", help="重新分类全部条目")
+    filt.set_defaults(func=cmd_filter)
 
     desktop = subs.add_parser("desktop", help="打开桌面窗口（pywebview）")
     desktop.add_argument("--port", type=int, default=7788)
