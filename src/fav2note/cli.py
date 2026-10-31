@@ -23,6 +23,13 @@ from .store.state import StateStore
 from .store.vault import Vault
 
 
+
+def _frame_limit(config: Config, sections: int) -> int:
+    """截图数量落在 [frames_min, frames_max]，默认跟分节数走。"""
+    wanted = sections or (config.frames_min + config.frames_max) // 2
+    return max(config.frames_min, min(config.frames_max, wanted))
+
+
 def _items_file(config: Config) -> Path:
     return config.data / "items.json"
 
@@ -170,7 +177,8 @@ def cmd_run(args, config: Config) -> int:
             # 没有解说：抽帧 + OCR，仍然成篇，不丢弃
             print("    无解说，改用画面文字生成笔记")
             raw_frames = frames_for_sections(
-                config, media.video, [], media.workdir / "frames", limit=config.frames_per_note
+                config, media.video, [], media.workdir / "frames",
+                limit=_frame_limit(config, 0),
             )
             frames_only = [path for _, path in raw_frames]
             text = read_many(frames_only) if frames_only else ""
@@ -197,7 +205,8 @@ def cmd_run(args, config: Config) -> int:
 
         frames = frames_for_sections(
             config, media.video, draft.sections,
-            vault.assets_dir(item, draft.category), limit=config.frames_per_note,
+            vault.assets_dir(item, draft.category),
+            limit=_frame_limit(config, len(draft.sections)),
         )
         path = vault.write(item, draft, frames, vault.root)
         cost = time.perf_counter() - started

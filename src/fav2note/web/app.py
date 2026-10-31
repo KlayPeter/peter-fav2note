@@ -150,13 +150,21 @@ def create_app(config: Config) -> FastAPI:
         from ..sources.xiaohongshu import XiaohongshuSource
 
         def job(log):
+            from ..store.accounts import Accounts
+
+            accounts = Accounts(config.data / "accounts.json")
             targets = ["xhs", "douyin"] if source == "both" else [source]
             found = []
             for name in targets:
                 if name == "douyin":
-                    items = DouyinSource(config.cache / "douyin_profile").collect(limit=limit)
-                    found += items
-                    log(f"抖音：{len(items)} 条")
+                    try:
+                        items = DouyinSource(config.cache / "douyin_profile").collect(limit=limit)
+                        accounts.set("douyin", True, f"{len(items)} 条")
+                        found += items
+                        log(f"抖音：{len(items)} 条")
+                    except Exception as error:  # noqa: BLE001
+                        accounts.set("douyin", False, str(error)[:120])
+                        log(f"抖音失败：{error}")
                 else:
                     export = config.inbox / "fav_all.json"
                     if not export.is_file():
@@ -203,15 +211,32 @@ def create_app(config: Config) -> FastAPI:
             "has_key": bool(config.api_key),
             "base_url": config.base_url,
             "model": config.model,
-            "frames": config.frames_per_note,
+            "frames_min": config.frames_min,
+            "frames_max": config.frames_max,
+        }
+
+    @app.get("/api/status")
+    def accounts_status() -> dict:
+        from ..store.accounts import Accounts
+
+        store = Accounts(config.data / "accounts.json")
+        douyin = store.get("douyin")
+        return {
+            "douyin": douyin,
+            "xhs_export": (config.inbox / "fav_all.json").is_file(),
         }
 
     @app.post("/api/config")
     def set_config(payload: dict) -> dict:
+        frames_min = int(payload.get("frames_min") or 3)
+        frames_max = int(payload.get("frames_max") or 10)
+        if frames_min > frames_max:
+            frames_min, frames_max = frames_max, frames_min
         updates = {
             "FAV2NOTE_BASE_URL": str(payload.get("base_url", "")).strip(),
             "FAV2NOTE_MODEL": str(payload.get("model", "")).strip(),
-            "FAV2NOTE_FRAMES": str(payload.get("frames", "")).strip(),
+            "FAV2NOTE_FRAMES_MIN": str(max(1, min(20, frames_min))),
+            "FAV2NOTE_FRAMES_MAX": str(max(1, min(20, frames_max))),
         }
         key = str(payload.get("api_key", "")).strip()
         if key:

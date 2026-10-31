@@ -39,7 +39,8 @@ class Config:
     asr_compute: str = "float16"
     ffmpeg: str = "ffmpeg"
     ffprobe: str = "ffprobe"
-    frames_per_note: int = 5
+    frames_min: int = 3
+    frames_max: int = 10
     platform_dir: bool = True
 
     @classmethod
@@ -61,7 +62,8 @@ class Config:
             asr_compute=get("FAV2NOTE_ASR_COMPUTE", "float16" if device == "cuda" else "int8"),
             ffmpeg=get("FAV2NOTE_FFMPEG", "ffmpeg"),
             ffprobe=get("FAV2NOTE_FFPROBE", "ffprobe"),
-            frames_per_note=int(get("FAV2NOTE_FRAMES", "5")),
+            frames_min=int(get("FAV2NOTE_FRAMES_MIN", "3")),
+            frames_max=int(get("FAV2NOTE_FRAMES_MAX", "10")),
         )
 
     # ---- 目录 ----
