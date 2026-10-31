@@ -48,6 +48,27 @@ CATEGORIES = {
 }
 
 
+
+CATEGORY_HINTS = (
+    (r"拍照|摄影|构图|调色|剪辑|修图|拍出|灯光|镜头", "技能教程"),
+    (r"学习|备考|记忆|笔记|刷题|英语|数学|语文|背书", "学习方法"),
+    (r"AI|大模型|编程|代码|工具|网站|软件|效率", "技术AI"),
+    (r"职场|面试|简历|理财|副业|商业|存钱|工资", "职场商业"),
+    (r"科普|历史|科学|原理|医学|身体|健康", "科普知识"),
+    (r"习惯|自律|作息|时间管理|拖延", "习惯自律"),
+    (r"书单|电影|纪录片|读书|好书", "书影推荐"),
+    (r"思维|认知|哲学|心理|道理|逻辑", "思维认知"),
+)
+
+
+def infer_category(title: str) -> str:
+    """模型给了不认识的分类时，按标题兜底推断。"""
+    for pattern, name in CATEGORY_HINTS:
+        if re.search(pattern, title or "", re.I):
+            return name
+    return "未分类"
+
+
 class Extractor:
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -136,7 +157,7 @@ class Extractor:
 
         category = str(data.get("category", "")).strip()
         if category not in CATEGORIES:
-            category = "未分类"
+            category = infer_category(item.title)
 
         sections = []
         for section in data.get("sections") or []:
