@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 from datetime import datetime
@@ -100,8 +101,12 @@ class Vault:
             hits = [f for f in frames if f[0] == index]
             if not hits:
                 return []
-            # 图片相对当前笔记所在目录，Obsidian 直接可渲染
-            rel = hits[0][1].relative_to(note_dir).as_posix()
+            # 图片相对当前笔记所在目录，Obsidian 直接可渲染；
+            # 图与笔记不同目录时用 relpath 兜底（分类被改写过的旧笔记会遇到）
+            try:
+                rel = hits[0][1].relative_to(note_dir).as_posix()
+            except ValueError:
+                rel = Path(os.path.relpath(hits[0][1], note_dir)).as_posix()
             return [f"![{mmss(hits[0][0])}]({rel})", ""]
 
         head = [
