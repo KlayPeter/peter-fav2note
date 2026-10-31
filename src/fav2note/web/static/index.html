@@ -135,6 +135,11 @@
 
     <!-- 概览 -->
     <section id="view-overview">
+      <div class="hint" style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:16px;color:var(--sub);font-size:12px;line-height:1.7">
+        <b style="color:var(--ink)">采集</b> 只把收藏列表拉进清单，不下载、不花钱；
+        <b style="color:var(--ink)">处理</b> 才会下载 → 转写 → 提炼 → 入库，会消耗 API 额度。
+        <span id="action-state"></span>
+      </div>
       <div class="cards">
         <div class="card"><div class="k">知识库笔记</div><div class="v" id="c-notes">-</div><div class="h" id="c-platform"></div></div>
         <div class="card"><div class="k">已处理</div><div class="v" id="c-done">-</div><div class="h">含跳过与图文</div></div>
@@ -280,33 +285,44 @@ window.addEventListener("hashchange", () => go(location.hash.slice(1) || "overvi
 function renderActions() {
   const box = $("page-actions");
   box.innerHTML = "";
-  const add = (label, cls, handler) => {
+  const add = (label, cls, handler, tip) => {
     const b = document.createElement("button");
     b.textContent = label;
     if (cls) b.className = cls;
+    if (tip) b.title = tip;
     b.disabled = state.running;
     b.onclick = handler;
     box.appendChild(b);
   };
   if (state.view === "overview") {
-    add("登录小红书", "", () => start("/api/login?source=xhs", "浏览器即将打开，请扫码登录小红书"));
-    add("登录抖音", "", () => start("/api/login?source=douyin", "浏览器即将打开，请扫码登录抖音"));
-    add("采集小红书", "", () => start("/api/collect?source=xhs&limit=100", "开始采集小红书"));
-    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "开始采集抖音"));
-    add("开始处理", "", () => start("/api/run?limit=20", "处理队列前 20 条"));
-    add("处理全部", "primary", () => start("/api/run?limit=0", "处理全部未完成条目"));
+    add("登录小红书", "", () => start("/api/login?source=xhs", "浏览器即将打开，请扫码登录小红书"),
+      "打开浏览器扫码，把登录态存到本地。只需做一次，过期再扫。");
+    add("登录抖音", "", () => start("/api/login?source=douyin", "浏览器即将打开，请扫码登录抖音"),
+      "打开浏览器扫码，把登录态存到本地。只需做一次，过期再扫。");
+    add("采集小红书", "", () => start("/api/collect?source=xhs&limit=100", "开始采集小红书"),
+      "只拉收藏列表，写进清单，不下载、不转写、不花钱。");
+    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "开始采集抖音"),
+      "只拉收藏列表，写进清单，不下载、不转写、不花钱。");
+    add("开始处理", "", () => start("/api/run?limit=20", "处理队列前 20 条"),
+      "按清单顺序处理 20 条：下载 → 转写 → 提炼 → 入库。会消耗 API 额度。");
+    add("处理全部", "primary", () => start("/api/run?limit=0", "处理全部未完成条目"),
+      "处理清单里所有还没完成的条目。第一次全量跑用这个。");
   }
   if (state.view === "items") {
-    add("采集小红书", "", () => start("/api/collect?source=xhs&limit=100", "开始采集小红书"));
-    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "开始采集抖音"));
-    add(`处理选中 (${state.selected.size})`, "primary", startSelected);
+    add("采集小红书", "", () => start("/api/collect?source=xhs&limit=100", "开始采集小红书"),
+      "只拉收藏列表，不下载。");
+    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "开始采集抖音"),
+      "只拉收藏列表，不下载。");
+    add(`处理选中 (${state.selected.size})`, "primary", startSelected,
+      "只处理勾选的这些条目，其余不动。");
   }
   if (state.view === "notes") {
-    add("重建关联", "", () => start("/api/link", "开始重建关联"));
-    add("刷新", "primary", refreshAll);
+    add("重建关联", "", () => start("/api/link", "开始重建关联"),
+      "重新计算笔记之间的双链，改了分类或新增笔记后跑一次。");
+    add("刷新", "primary", refreshAll, "重新读取统计与列表。");
     return;
   }
-  add("刷新", "primary", refreshAll);
+  add("刷新", "primary", refreshAll, "重新读取统计与列表。");
 }
 
 async function startSelected() {
@@ -392,6 +408,10 @@ async function loadSummary() {
   state.running = job.running;
   $("status-dot").className = "dot" + (job.running ? " on" : "");
   $("status-text").textContent = job.running ? job.name + " 运行中" : "空闲";
+  const names = { collect: "采集", run: "处理", link: "重建关联", login: "登录", auto: "定时任务" };
+  $("action-state").innerHTML = job.running
+    ? `　<b style="color:var(--accent)">正在${names[job.name] || job.name}，已 ${job.elapsed}s</b>`
+    : "　当前空闲。";
   $("log").textContent = job.log && job.log.length ? job.log.join("\n") : "空闲中";
   $("log").scrollTop = $("log").scrollHeight;
   $("progress").style.width = job.running ? Math.min(95, 20 + job.elapsed * 2) + "%" : "0%";
