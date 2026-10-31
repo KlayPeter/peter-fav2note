@@ -110,9 +110,9 @@ def cmd_login(args, config: Config) -> int:
         DouyinSource(config.cache / "douyin_profile").login()
         print("登录态已保存")
         return 0
-    XiaohongshuSource(profile_dir=config.cache / "xhs_profile").login()
-    print("登录态已保存")
-    return 0
+    ok = XiaohongshuSource(profile_dir=config.cache / "xhs_profile").login()
+    print("登录态已保存" if ok else "登录未完成，登录态未更新")
+    return 0 if ok else 1
 
 
 def cmd_run(args, config: Config) -> int:

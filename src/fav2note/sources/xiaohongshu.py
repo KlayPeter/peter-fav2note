@@ -63,34 +63,63 @@ class XiaohongshuSource(Source):
         self.profile_dir = Path(profile_dir) if profile_dir else Path("data/cache/xhs_profile")
 
     # ---- 登录 ----
-    def login(self, timeout: int = 300) -> None:
-        """打开浏览器扫码；检测到 web_session 就保存退出。"""
+    def login(self, timeout: int = 600) -> None:
+        """打开浏览器扫码；以 /user/me 的 guest 字段为准，确认真的登录了。"""
         import time
 
         from .douyin import _playwright
 
         sync_playwright = _playwright()
         self.profile_dir.mkdir(parents=True, exist_ok=True)
+        me: dict = {}
+
         with sync_playwright() as pw:
             context = pw.chromium.launch_persistent_context(
                 str(self.profile_dir), headless=False,
                 args=["--disable-blink-features=AutomationControlled"],
             )
             page = context.pages[0] if context.pages else context.new_page()
+
+            def on_response(response):
+                if "/api/sns/web/v2/user/me" in response.url:
+                    try:
+                        me.update(response.json().get("data") or {})
+                    except Exception:  # noqa: BLE001
+                        pass
+
+            page.on("response", on_response)
             page.goto("https://www.xiaohongshu.com/explore", wait_until="domcontentloaded")
-            print("浏览器已打开，请扫码登录；脚本会自动检测，最多等 5 分钟…")
+            page.wait_for_timeout(3000)
+            page.bring_to_front()
+
+            # 主动点开登录框，省得用户找不到入口
+            for label in ("登录", "立即登录"):
+                try:
+                    button = page.get_by_text(label, exact=True).first
+                    if button.is_visible():
+                        button.click(timeout=3000)
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+
+            print(f"浏览器已打开，请扫码登录；脚本会自动检测，最多等 {timeout // 60} 分钟…")
 
             deadline = time.time() + timeout
             logged = False
             while time.time() < deadline:
-                names = {c.get("name") for c in context.cookies()}
-                if "web_session" in names:
+                page.wait_for_timeout(2000)
+                # 游客态不算登录，必须 guest=false 且有昵称
+                if me and me.get("guest") is False and (me.get("nickname") or me.get("user_id")):
                     logged = True
                     break
-                page.wait_for_timeout(2000)
-            print("登录态已保存" if logged else "超时：未检测到登录")
-            page.wait_for_timeout(1000)
+
+            print(
+                f"登录成功：{me.get('nickname', '')}" if logged
+                else "超时：仍是游客态，请重新扫码（登录后页面右上角会显示你的头像）"
+            )
+            page.wait_for_timeout(1500)
             context.close()
+        return logged
 
     # ---- 浏览器采集 ----
     def collect(self, limit: int = 500, max_scroll: int = 200, **kwargs) -> list[Item]:
@@ -99,8 +128,14 @@ class XiaohongshuSource(Source):
 
         sync_playwright = _playwright()
         notes: list[dict] = []
+        me: dict = {}
 
         def on_response(response):
+            if "/api/sns/web/v2/user/me" in response.url:
+                try:
+                    me.update(response.json().get("data") or {})
+                except Exception:  # noqa: BLE001
+                    pass
             if "/api/sns/web/" not in response.url:
                 return
             try:
@@ -153,6 +188,8 @@ class XiaohongshuSource(Source):
             logged_in = "web_session" in {c.get("name") for c in context.cookies()}
             context.close()
 
+        if me and me.get("guest") is not False:
+            raise RuntimeError("小红书未登录（游客态），请先执行：fav2note login --source xhs")
         if not notes and not logged_in:
             raise RuntimeError("小红书登录态已失效，请重新执行：fav2note login --source xhs")
         if not notes:
