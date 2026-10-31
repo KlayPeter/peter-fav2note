@@ -19,6 +19,27 @@ from ..store.state import StateStore
 STATIC = Path(__file__).with_name("static")
 
 
+def _update_env(path: Path, updates: dict[str, str]) -> None:
+    """就地更新 .env：有则替换，无则追加。"""
+    lines: list[str] = []
+    if path.is_file():
+        lines = path.read_text(encoding="utf-8").splitlines()
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for line in lines:
+        key = line.split("=", 1)[0].strip() if "=" in line else ""
+        if key in updates:
+            result.append(f"{key}={updates[key]}")
+            seen.add(key)
+        else:
+            result.append(line)
+    for key, value in updates.items():
+        if key not in seen:
+            result.append(f"{key}={value}")
+    path.write_text("\n".join(result) + "\n", encoding="utf-8")
+
+
 class JobRunner:
     """同一时刻只跑一个后台任务，前端轮询进度。"""
 
@@ -155,6 +176,48 @@ def create_app(config: Config) -> FastAPI:
     @app.get("/api/job")
     def job() -> dict:
         return runner.snapshot()
+
+    @app.get("/api/config")
+    def get_config() -> dict:
+        return {
+            "has_key": bool(config.api_key),
+            "base_url": config.base_url,
+            "model": config.model,
+            "frames": config.frames_per_note,
+        }
+
+    @app.post("/api/config")
+    def set_config(payload: dict) -> dict:
+        updates = {
+            "FAV2NOTE_BASE_URL": str(payload.get("base_url", "")).strip(),
+            "FAV2NOTE_MODEL": str(payload.get("model", "")).strip(),
+            "FAV2NOTE_FRAMES": str(payload.get("frames", "")).strip(),
+        }
+        key = str(payload.get("api_key", "")).strip()
+        if key:
+            updates["FAV2NOTE_API_KEY"] = key
+        _update_env(config.home / ".env", {k: v for k, v in updates.items() if v})
+        return {"saved": True}
+
+    @app.post("/api/run")
+    def run_pipeline(limit: int = 20) -> JSONResponse:
+        def job(log):
+            import subprocess
+            import sys
+
+            cmd = [sys.executable, "-m", "fav2note.cli", "--home", str(config.home), "run", "--limit", str(limit)]
+            log("$ " + " ".join(cmd[2:]))
+            proc = subprocess.Popen(
+                cmd, cwd=str(config.home), stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="ignore",
+            )
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                log(line.rstrip())
+            proc.wait()
+            log(f"退出码 {proc.returncode}")
+
+        return JSONResponse({"started": runner.start("run", job)})
 
     return app
 

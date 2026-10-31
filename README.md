@@ -70,9 +70,43 @@ fav2note run --limit 20
 ### 其他
 
 ```bash
-fav2note link              # 只重建笔记关联
-fav2note stats             # 看处理统计
+fav2note web                # 浏览器面板：http://127.0.0.1:7788
+fav2note link               # 只重建笔记关联
+fav2note stats              # 看处理统计
 ```
+
+## 桌面端
+
+两种壳，按需选：
+
+| 方式 | 命令 | 体积 | 说明 |
+|---|---|---|---|
+| 浏览器面板 | `fav2note web` | 0 | 最快，调试用 |
+| pywebview 窗口 | `fav2note desktop` | 小 | 依赖 WebView2，纯 Python |
+| Electron 外壳 | `cd desktop && npm run dev` | 大 | 有托盘、安装包，接近成品 |
+
+### Electron 开发运行
+
+```bash
+cd desktop
+npm install
+npm run dev
+```
+
+`main.js` 会拉起本地后端（开发用仓库里的 `.venv`），等 `127.0.0.1:7788` 就绪后加载面板；退出时自动结束子进程。
+
+### 打包成 exe
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build_desktop.ps1
+```
+
+分两步：
+
+1. `pyinstaller` 把 Python 后端打成 `dist/backend/`（onedir）
+2. `electron-builder` 把它作为 `extraResources` 塞进安装包，产出 `dist/fav2note Setup 0.1.0.exe`
+
+打包后的后端 exe 由 Electron 直接拉起，用户机器上**不需要装 Python**。
 
 ## 输出结构
 

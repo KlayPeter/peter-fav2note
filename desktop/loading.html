@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>fav2note</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: #f6f6f4; color: #1b1b19;
+    font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .box { text-align: center; }
+  .name { font-size: 18px; font-weight: 650; letter-spacing: .3px; }
+  .tip { color: #71716c; font-size: 12px; margin-top: 6px; }
+  .bar { width: 160px; height: 2px; background: #e4e4e0; margin: 18px auto 0; overflow: hidden; border-radius: 2px; }
+  .bar i { display: block; width: 40%; height: 100%; background: #2f6f4f; animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="name">fav2note</div>
+    <div class="tip">正在启动本地服务…</div>
+    <div class="bar"><i></i></div>
+  </div>
+</body>
+</html>

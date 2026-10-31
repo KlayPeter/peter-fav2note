@@ -5,141 +5,345 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>fav2note</title>
 <style>
-  :root {
-    --bg: #fbfbfa;
-    --surface: #ffffff;
-    --line: #e6e6e3;
-    --ink: #191918;
-    --muted: #6f6f6b;
-    --accent: #2f6f4f;
+  :root{
+    --bg:#f6f6f4; --panel:#fff; --line:#e4e4e0; --ink:#1b1b19; --sub:#71716c;
+    --accent:#2f6f4f; --accent-soft:#eef5f0; --warn:#a33b2b; --warn-soft:#fdf3f1;
+    --radius:10px;
   }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font: 14px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex;overflow:hidden;
   }
-  header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 18px 28px; border-bottom: 1px solid var(--line); background: var(--surface);
-    position: sticky; top: 0; z-index: 10;
+  /* 侧栏 */
+  aside{
+    width:196px;flex:0 0 196px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;padding:16px 12px;
   }
-  h1 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: .3px; }
-  h1 span { color: var(--muted); font-weight: 400; margin-left: 8px; }
-  .actions { display: flex; gap: 8px; }
-  button {
-    font: inherit; padding: 6px 12px; border-radius: 6px; cursor: pointer;
-    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  .brand{font-weight:650;font-size:15px;letter-spacing:.2px;padding:4px 8px 14px}
+  .brand small{display:block;color:var(--sub);font-weight:400;font-size:11px;letter-spacing:.4px}
+  nav{display:flex;flex-direction:column;gap:2px}
+  nav a{
+    display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;
+    color:#3a3a36;text-decoration:none;font-size:13px;
   }
-  button:hover { border-color: #cfcfca; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .5; cursor: default; }
-  main { padding: 24px 28px 60px; max-width: 1080px; margin: 0 auto; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-  .card {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-    padding: 14px 16px;
+  nav a:hover{background:#f3f3f0}
+  nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  nav svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6}
+  .side-foot{margin-top:auto;padding:10px 8px;color:var(--sub);font-size:11px;line-height:1.5}
+  .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#c9c9c4;margin-right:6px}
+  .dot.on{background:#39a06a}
+
+  /* 主区 */
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  header{
+    height:56px;flex:0 0 56px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 24px;border-bottom:1px solid var(--line);background:var(--panel);
   }
-  .card .k { color: var(--muted); font-size: 12px; }
-  .card .v { font-size: 22px; font-weight: 600; margin-top: 4px; }
-  section { margin-bottom: 28px; }
-  section h2 {
-    font-size: 13px; font-weight: 600; color: var(--muted);
-    margin: 0 0 10px; text-transform: uppercase; letter-spacing: .6px;
+  header h1{font-size:14px;font-weight:600;margin:0}
+  header .actions{display:flex;gap:8px}
+  button{
+    font:inherit;font-size:13px;padding:6px 13px;border-radius:7px;cursor:pointer;
+    border:1px solid var(--line);background:var(--panel);color:var(--ink);transition:.15s;
   }
-  table { width: 100%; border-collapse: collapse; background: var(--surface);
-          border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
-  th { color: var(--muted); font-weight: 500; background: #fafaf8; }
-  tr:last-child td { border-bottom: none; }
-  .tag { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
-  .tag.done { color: var(--accent); border-color: #cfe3d8; background: #f2f8f4; }
-  .tag.failed { color: #a33b2b; border-color: #efd8d3; background: #fdf4f2; }
-  .log {
-    background: #1b1b1a; color: #d8d8d2; border-radius: 10px; padding: 14px 16px;
-    font: 12px/1.7 ui-monospace, "Cascadia Code", Consolas, monospace;
-    max-height: 220px; overflow: auto; white-space: pre-wrap;
+  button:hover{border-color:#cfcfc9;background:#fafaf8}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#285f43}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .content{flex:1;overflow:auto;padding:22px 24px 48px}
+
+  /* 卡片 / 表格 */
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .card .k{color:var(--sub);font-size:12px}
+  .card .v{font-size:24px;font-weight:640;margin-top:2px;letter-spacing:-.3px}
+  .card .h{color:var(--sub);font-size:11px;margin-top:2px}
+  h2.sec{font-size:12px;color:var(--sub);font-weight:600;letter-spacing:.6px;text-transform:uppercase;margin:0 0 10px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:22px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px 14px;text-align:left;font-size:13px;border-bottom:1px solid var(--line)}
+  th{background:#fbfbf9;color:var(--sub);font-weight:500;font-size:12px}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#fbfbf9}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--sub)}
+  .tag.done{color:var(--accent);border-color:#cfe3d8;background:var(--accent-soft)}
+  .tag.failed{color:var(--warn);border-color:#eed6d1;background:var(--warn-soft)}
+  .tag.skip{color:#8a6d1f;border-color:#eadfc4;background:#fbf6e9}
+  .empty{color:var(--sub);text-align:center;padding:26px}
+
+  /* 表单 */
+  .field{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .field:last-child{border-bottom:none}
+  .field label{width:140px;flex:0 0 140px;color:#3a3a36;font-size:13px;padding-top:6px}
+  .field .desc{color:var(--sub);font-size:12px;margin-top:4px}
+  input[type=text],input[type=password],input[type=number]{
+    width:100%;max-width:420px;font:inherit;font-size:13px;padding:7px 10px;
+    border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);
   }
-  .empty { color: var(--muted); padding: 18px; text-align: center; }
-  .muted { color: var(--muted); }
+  input:focus{outline:2px solid var(--accent-soft);border-color:#b9cfc2}
+
+  /* 日志 */
+  .log{
+    background:#161615;color:#d5d5cf;border-radius:var(--radius);padding:12px 14px;
+    font:12px/1.65 ui-monospace,"Cascadia Code",Consolas,monospace;
+    height:210px;overflow:auto;white-space:pre-wrap;margin:0;
+  }
+  .bar{height:3px;background:#ecece8;border-radius:2px;overflow:hidden;margin-bottom:14px}
+  .bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+  .toast{
+    position:fixed;right:22px;bottom:22px;background:#1b1b19;color:#fff;padding:10px 14px;
+    border-radius:8px;font-size:13px;opacity:0;transform:translateY(6px);transition:.25s;pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:translateY(0)}
+  .row{display:flex;gap:10px;align-items:center}
+  .muted{color:var(--sub)}
+  .hidden{display:none !important}
 </style>
 </head>
 <body>
-<header>
-  <h1>fav2note<span>收藏转知识库</span></h1>
-  <div class="actions">
-    <button id="btn-collect">采集抖音</button>
-    <button id="btn-link">重建关联</button>
-    <button class="primary" id="btn-refresh">刷新</button>
-  </div>
-</header>
+<aside>
+  <div class="brand">fav2note<small>收藏转知识库</small></div>
+  <nav>
+    <a href="#overview" data-view="overview" class="active">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      概览
+    </a>
+    <a href="#items" data-view="items">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      采集清单
+    </a>
+    <a href="#notes" data-view="notes">
+      <svg viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/></svg>
+      笔记库
+    </a>
+    <a href="#settings" data-view="settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 3h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4L6 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4L19 13z"/></svg>
+      设置
+    </a>
+  </nav>
+  <div class="side-foot"><span class="dot" id="status-dot"></span><span id="status-text">空闲</span></div>
+</aside>
 
 <main>
-  <div class="stats">
-    <div class="card"><div class="k">知识库笔记</div><div class="v" id="s-notes">-</div></div>
-    <div class="card"><div class="k">已处理</div><div class="v" id="s-done">-</div></div>
-    <div class="card"><div class="k">失败</div><div class="v" id="s-failed">-</div></div>
-    <div class="card"><div class="k">待处理</div><div class="v" id="s-pending">-</div></div>
+  <header>
+    <h1 id="page-title">概览</h1>
+    <div class="actions" id="page-actions"></div>
+  </header>
+  <div class="content">
+
+    <!-- 概览 -->
+    <section id="view-overview">
+      <div class="cards">
+        <div class="card"><div class="k">知识库笔记</div><div class="v" id="c-notes">-</div><div class="h" id="c-platform"></div></div>
+        <div class="card"><div class="k">已处理</div><div class="v" id="c-done">-</div><div class="h">含跳过与图文</div></div>
+        <div class="card"><div class="k">失败</div><div class="v" id="c-failed">-</div><div class="h">可重试</div></div>
+        <div class="card"><div class="k">待处理</div><div class="v" id="c-pending">-</div><div class="h">采集后进入队列</div></div>
+      </div>
+      <h2 class="sec">任务进度</h2>
+      <div class="bar"><i id="progress"></i></div>
+      <pre class="log" id="log">空闲中</pre>
+    </section>
+
+    <!-- 采集清单 -->
+    <section id="view-items" class="hidden">
+      <div class="panel">
+        <table>
+          <thead><tr><th style="width:46%">标题</th><th>平台</th><th>类型</th><th>状态</th></tr></thead>
+          <tbody id="items-body"><tr><td colspan="4" class="empty">还没有采集结果</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 笔记库 -->
+    <section id="view-notes" class="hidden">
+      <div class="panel">
+        <table>
+          <thead><tr><th style="width:50%">标题</th><th>平台</th><th>分类</th></tr></thead>
+          <tbody id="notes-body"><tr><td colspan="3" class="empty">还没有笔记</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section id="view-settings" class="hidden">
+      <div class="panel">
+        <div class="field">
+          <label>API Key</label>
+          <div style="flex:1">
+            <input type="password" id="f-key" placeholder="留空则不修改" />
+            <div class="desc">存在本地 .env，不会上传。当前：<span id="key-state" class="muted">未配置</span></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Base URL</label>
+          <div style="flex:1"><input type="text" id="f-base" placeholder="https://api.deepseek.com/v1" /></div>
+        </div>
+        <div class="field">
+          <label>模型</label>
+          <div style="flex:1"><input type="text" id="f-model" placeholder="deepseek-chat" /></div>
+        </div>
+        <div class="field">
+          <label>每条截图数</label>
+          <div style="flex:1"><input type="number" id="f-frames" min="1" max="10" /></div>
+        </div>
+        <div class="field">
+          <label></label>
+          <div style="flex:1"><button class="primary" id="btn-save">保存</button></div>
+        </div>
+      </div>
+      <p class="muted" style="font-size:12px">修改后需重启面板生效。</p>
+    </section>
+
   </div>
-
-  <section>
-    <h2>最近笔记</h2>
-    <table>
-      <thead><tr><th style="width:42%">标题</th><th>平台</th><th>分类</th></tr></thead>
-      <tbody id="notes"></tbody>
-    </table>
-  </section>
-
-  <section>
-    <h2>任务日志</h2>
-    <div class="log" id="log">空闲中</div>
-  </section>
 </main>
+<div class="toast" id="toast"></div>
 
 <script>
 const $ = (id) => document.getElementById(id);
+const state = { view: "overview", running: false };
 
-async function json(url, options) {
-  const res = await fetch(url, options);
+function toast(text) {
+  const el = $("toast");
+  el.textContent = text;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
 
-async function refresh() {
-  const [summary, notes, job] = await Promise.all([
-    json("/api/summary"), json("/api/notes?limit=30"), json("/api/job"),
-  ]);
-  $("s-notes").textContent = summary.notes;
-  $("s-done").textContent = summary.counts.done || 0;
-  $("s-failed").textContent = summary.counts.failed || 0;
-  $("s-pending").textContent = summary.counts.pending || 0;
-
-  const tbody = $("notes");
-  tbody.innerHTML = notes.notes.length
-    ? notes.notes.map((n) => `<tr><td>${escapeHtml(n.title)}</td><td>${escapeHtml(n.platform)}</td><td>${escapeHtml(n.category)}</td></tr>`).join("")
-    : '<tr><td colspan="3" class="empty">还没有笔记</td></tr>';
-
-  $("log").textContent = job.log && job.log.length ? job.log.join("\n") : "空闲中";
-  $("btn-collect").disabled = job.running;
-  $("btn-link").disabled = job.running;
-}
-
 function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-$("btn-collect").onclick = async () => {
-  await json("/api/collect?source=douyin&limit=100", { method: "POST" });
-  refresh();
-};
-$("btn-link").onclick = async () => {
-  await json("/api/link", { method: "POST" });
-  refresh();
-};
-$("btn-refresh").onclick = refresh;
+/* 路由 */
+const TITLES = { overview: "概览", items: "采集清单", notes: "笔记库", settings: "设置" };
+function go(view) {
+  state.view = view;
+  document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("active", a.dataset.view === view));
+  ["overview", "items", "notes", "settings"].forEach((name) => {
+    $("view-" + name).classList.toggle("hidden", name !== view);
+  });
+  $("page-title").textContent = TITLES[view];
+  renderActions();
+  if (view === "items") loadItems();
+  if (view === "notes") loadNotes();
+  if (view === "settings") loadSettings();
+}
+window.addEventListener("hashchange", () => go(location.hash.slice(1) || "overview"));
 
-refresh();
-setInterval(refresh, 4000);
+function renderActions() {
+  const box = $("page-actions");
+  box.innerHTML = "";
+  const add = (label, cls, handler) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (cls) b.className = cls;
+    b.disabled = state.running;
+    b.onclick = handler;
+    box.appendChild(b);
+  };
+  if (state.view === "overview" || state.view === "items") {
+    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "采集已开始"));
+  }
+  if (state.view === "notes") {
+    add("重建关联", "", () => start("/api/link", "开始重建关联"));
+  }
+  add("刷新", "primary", refreshAll);
+}
+
+async function start(url, message) {
+  try {
+    await api(url, { method: "POST" });
+    toast(message);
+    setTimeout(refreshAll, 800);
+  } catch (e) {
+    toast("启动失败：" + e.message);
+  }
+}
+
+/* 数据 */
+async function loadSummary() {
+  const data = await api("/api/summary");
+  $("c-notes").textContent = data.notes;
+  $("c-done").textContent = data.counts.done || 0;
+  $("c-failed").textContent = data.counts.failed || 0;
+  $("c-pending").textContent = data.counts.pending || 0;
+  $("c-platform").textContent = Object.entries(data.by_platform || {}).map(([k, v]) => `${k} ${v}`).join(" · ") || "—";
+
+  const job = data.job;
+  state.running = job.running;
+  $("status-dot").className = "dot" + (job.running ? " on" : "");
+  $("status-text").textContent = job.running ? job.name + " 运行中" : "空闲";
+  $("log").textContent = job.log && job.log.length ? job.log.join("\n") : "空闲中";
+  $("log").scrollTop = $("log").scrollHeight;
+  $("progress").style.width = job.running ? Math.min(95, 20 + job.elapsed * 2) + "%" : "0%";
+  renderActions();
+}
+
+async function loadItems() {
+  const data = await api("/api/items?limit=300");
+  const body = $("items-body");
+  if (!data.items.length) {
+    body.innerHTML = '<tr><td colspan="4" class="empty">还没有采集结果</td></tr>';
+    return;
+  }
+  body.innerHTML = data.items.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.title)}</td>
+      <td>${escapeHtml(item.platform)}</td>
+      <td>${escapeHtml(item.kind === "video" ? "视频" : "图文")}</td>
+      <td><span class="tag ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span></td>
+    </tr>`).join("");
+}
+
+async function loadNotes() {
+  const data = await api("/api/notes?limit=200");
+  const body = $("notes-body");
+  body.innerHTML = data.notes.length
+    ? data.notes.map((n) => `<tr><td>${escapeHtml(n.title)}</td><td>${escapeHtml(n.platform)}</td><td>${escapeHtml(n.category)}</td></tr>`).join("")
+    : '<tr><td colspan="3" class="empty">还没有笔记</td></tr>';
+}
+
+async function loadSettings() {
+  const data = await api("/api/config");
+  $("f-base").value = data.base_url || "";
+  $("f-model").value = data.model || "";
+  $("f-frames").value = data.frames || 5;
+  $("key-state").textContent = data.has_key ? "已配置" : "未配置";
+}
+
+$("btn-save").onclick = async () => {
+  const body = {
+    api_key: $("f-key").value.trim(),
+    base_url: $("f-base").value.trim(),
+    model: $("f-model").value.trim(),
+    frames: Number($("f-frames").value) || 5,
+  };
+  try {
+    await api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast("已保存，重启面板后生效");
+    $("f-key").value = "";
+    loadSettings();
+  } catch (e) {
+    toast("保存失败：" + e.message);
+  }
+};
+
+function refreshAll() {
+  loadSummary().catch((e) => toast(e.message));
+  if (state.view === "items") loadItems().catch(() => {});
+  if (state.view === "notes") loadNotes().catch(() => {});
+}
+
+go(location.hash.slice(1) || "overview");
+refreshAll();
+setInterval(loadSummary, 3000);
 </script>
 </body>
 </html>

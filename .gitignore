@@ -16,3 +16,8 @@ vault/
 # ç³»ç»Ÿ
 .DS_Store
 Thumbs.db
+
+# ×ÀÃæ¶Ë
+desktop/node_modules/
+dist/
+build/work/
