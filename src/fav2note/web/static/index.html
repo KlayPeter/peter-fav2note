@@ -151,8 +151,11 @@
     <section id="view-items" class="hidden">
       <div class="panel">
         <table>
-          <thead><tr><th style="width:46%">标题</th><th>平台</th><th>类型</th><th>状态</th></tr></thead>
-          <tbody id="items-body"><tr><td colspan="4" class="empty">还没有采集结果</td></tr></tbody>
+          <thead><tr>
+            <th style="width:34px"><input type="checkbox" id="chk-all" title="全选" /></th>
+            <th style="width:44%">标题</th><th>平台</th><th>类型</th><th>状态</th>
+          </tr></thead>
+          <tbody id="items-body"><tr><td colspan="5" class="empty">还没有采集结果</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -211,7 +214,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { view: "overview", running: false };
+const state = { view: "overview", running: false, selected: new Set() };
 
 function toast(text) {
   const el = $("toast");
@@ -257,10 +260,15 @@ function renderActions() {
     b.onclick = handler;
     box.appendChild(b);
   };
-  if (state.view === "overview" || state.view === "items") {
+  if (state.view === "overview") {
     add("采集小红书", "", () => start("/api/collect?source=xhs&limit=100", "开始采集小红书"));
     add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "开始采集抖音"));
     add("开始处理", "primary", () => start("/api/run?limit=20", "开始处理队列"));
+  }
+  if (state.view === "items") {
+    add("采集小红书", "", () => start("/api/collect?source=xhs&limit=100", "开始采集小红书"));
+    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "开始采集抖音"));
+    add(`处理选中 (${state.selected.size})`, "primary", startSelected);
   }
   if (state.view === "notes") {
     add("重建关联", "", () => start("/api/link", "开始重建关联"));
@@ -269,6 +277,34 @@ function renderActions() {
   }
   add("刷新", "primary", refreshAll);
 }
+
+async function startSelected() {
+  const keys = [...state.selected];
+  if (!keys.length) {
+    toast("先在列表里勾选要处理的条目");
+    return;
+  }
+  try {
+    await api("/api/run?limit=0", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keys }),
+    });
+    toast(`开始处理 ${keys.length} 条`);
+    setTimeout(refreshAll, 800);
+  } catch (e) {
+    toast("启动失败：" + e.message);
+  }
+}
+
+$("chk-all").addEventListener("change", (event) => {
+  const boxes = document.querySelectorAll(".chk-item");
+  boxes.forEach((box) => {
+    box.checked = event.target.checked;
+    event.target.checked ? state.selected.add(box.dataset.key) : state.selected.delete(box.dataset.key);
+  });
+  renderActions();
+});
 
 async function start(url, message) {
   try {
@@ -303,16 +339,28 @@ async function loadItems() {
   const data = await api("/api/items?limit=300");
   const body = $("items-body");
   if (!data.items.length) {
-    body.innerHTML = '<tr><td colspan="4" class="empty">还没有采集结果</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="empty">还没有采集结果</td></tr>';
     return;
   }
-  body.innerHTML = data.items.map((item) => `
-    <tr>
+  body.innerHTML = data.items.map((item) => {
+    const key = `${item.platform}:${item.item_id}`;
+    const checked = state.selected.has(key) ? "checked" : "";
+    return `<tr>
+      <td><input type="checkbox" class="chk-item" data-key="${escapeHtml(key)}" data-status="${escapeHtml(item.status)}" ${checked}></td>
       <td>${escapeHtml(item.title)}</td>
       <td>${escapeHtml(item.platform)}</td>
       <td>${escapeHtml(item.kind === "video" ? "视频" : "图文")}</td>
       <td><span class="tag ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span></td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
+
+  body.querySelectorAll(".chk-item").forEach((box) => {
+    box.addEventListener("change", () => {
+      box.checked ? state.selected.add(box.dataset.key) : state.selected.delete(box.dataset.key);
+      renderActions();
+    });
+  });
+  $("chk-all").checked = data.items.length > 0 && data.items.every((i) => state.selected.has(`${i.platform}:${i.item_id}`));
 }
 
 async function loadNotes() {

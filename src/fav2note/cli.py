@@ -76,6 +76,16 @@ def _merge_items(config: Config, new_items: list[Item]) -> list[Item]:
     return result
 
 
+def _load_selection(spec: str) -> set[str] | None:
+    """--select 支持两种写法：逗号分隔的 key，或一个每行一个 key 的文件。"""
+    if not spec:
+        return None
+    path = Path(spec)
+    if path.is_file():
+        return {line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()}
+    return {part.strip() for part in spec.split(",") if part.strip()}
+
+
 def cmd_collect(args, config: Config) -> int:
     config.ensure_dirs()
     sources = ["xhs", "douyin"] if args.source == "both" else [args.source]
@@ -112,7 +122,11 @@ def cmd_run(args, config: Config) -> int:
     extractor = Extractor(config)
 
     # 只有 done 是终态：历史遗留的 image_only / skip 也应重新尝试
-    todo = [i for i in items if state.status(i.key) != "done"]
+    selected = _load_selection(getattr(args, "select", ""))
+    todo = [
+        item for item in items
+        if state.status(item.key) != "done" and (selected is None or item.key in selected)
+    ]
     if args.limit:
         todo = todo[: args.limit]
     print(f"待处理 {len(todo)} 条 / 共 {len(items)} 条")
@@ -297,6 +311,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = subs.add_parser("run", help="下载 → 转写 → 提炼 → 入库")
     run.add_argument("--limit", type=int, default=0)
+    run.add_argument("--select", default="", help="只处理指定条目：逗号分隔 key，或每行一个 key 的文件")
     run.add_argument("--no-link", action="store_true")
     run.set_defaults(func=cmd_run)
 

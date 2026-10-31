@@ -245,12 +245,22 @@ def create_app(config: Config) -> FastAPI:
         return {"saved": True}
 
     @app.post("/api/run")
-    def run_pipeline(limit: int = 20) -> JSONResponse:
+    def run_pipeline(limit: int = 20, payload: dict | None = None) -> JSONResponse:
+        keys = list((payload or {}).get("keys") or [])
+
         def job(log):
             import subprocess
             import sys
 
-            cmd = [sys.executable, "-m", "fav2note.cli", "--home", str(config.home), "run", "--limit", str(limit)]
+            cmd = [sys.executable, "-m", "fav2note.cli", "--home", str(config.home), "run"]
+            if keys:
+                selection = config.data / "selection.txt"
+                selection.write_text("\n".join(keys), encoding="utf-8")
+                cmd += ["--select", str(selection)]
+                log(f"处理选中的 {len(keys)} 条")
+            else:
+                cmd += ["--limit", str(limit)]
+                log(f"处理队列前 {limit} 条")
             log("$ " + " ".join(cmd[2:]))
             proc = subprocess.Popen(
                 cmd, cwd=str(config.home), stdout=subprocess.PIPE,
