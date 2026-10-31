@@ -249,10 +249,15 @@ function renderActions() {
     box.appendChild(b);
   };
   if (state.view === "overview" || state.view === "items") {
-    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "采集已开始"));
+    add("采集全部", "", () => start("/api/collect?source=both&limit=100", "开始采集两个平台"));
+    add("采集小红书", "", () => start("/api/collect?source=xhs&limit=100", "开始采集小红书"));
+    add("采集抖音", "", () => start("/api/collect?source=douyin&limit=100", "开始采集抖音"));
+    add("开始处理", "primary", () => start("/api/run?limit=20", "开始处理队列"));
   }
   if (state.view === "notes") {
     add("重建关联", "", () => start("/api/link", "开始重建关联"));
+    add("刷新", "primary", refreshAll);
+    return;
   }
   add("刷新", "primary", refreshAll);
 }

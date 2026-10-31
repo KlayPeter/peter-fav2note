@@ -131,11 +131,13 @@ def create_app(config: Config) -> FastAPI:
         for path in sorted(config.vault.rglob("*.md"), reverse=True):
             if "assets" in path.parts:
                 continue
-            rel = path.relative_to(config.vault)
+            head = path.read_text(encoding="utf-8")[:400]
+            platform = re.search(r"^platform:\s*(\S+)", head, re.M)
+            category = re.search(r"^category:\s*(\S+)", head, re.M)
             found.append({
                 "title": path.stem,
-                "platform": rel.parts[0] if len(rel.parts) > 1 else "",
-                "category": rel.parts[1] if len(rel.parts) > 2 else "",
+                "platform": platform.group(1) if platform else "",
+                "category": category.group(1) if category else path.parent.name,
                 "path": str(path),
             })
             if len(found) >= limit:
@@ -143,27 +145,42 @@ def create_app(config: Config) -> FastAPI:
         return {"notes": found, "total": len(found)}
 
     @app.post("/api/collect")
-    def collect(source: str = "douyin", limit: int = 100) -> JSONResponse:
+    def collect(source: str = "both", limit: int = 100) -> JSONResponse:
         from ..sources.douyin import DouyinSource
         from ..sources.xiaohongshu import XiaohongshuSource
 
         def job(log):
-            log(f"开始采集：{source}")
-            if source == "douyin":
-                found = DouyinSource(config.cache / "douyin_profile").collect(limit=limit)
-            else:
-                export = config.inbox / "fav_all.json"
-                if not export.is_file():
-                    log(f"没找到 {export}，先把导出的 JSON 放进来")
-                    return
-                found = XiaohongshuSource(export).collect()
-            import json
+            targets = ["xhs", "douyin"] if source == "both" else [source]
+            found = []
+            for name in targets:
+                if name == "douyin":
+                    items = DouyinSource(config.cache / "douyin_profile").collect(limit=limit)
+                    found += items
+                    log(f"抖音：{len(items)} 条")
+                else:
+                    export = config.inbox / "fav_all.json"
+                    if not export.is_file():
+                        log(f"小红书：没找到 {export}，先用油猴脚本导出")
+                        continue
+                    items = XiaohongshuSource(export).collect()
+                    found += items
+                    log(f"小红书：{len(items)} 条")
 
-            (config.data / "items.json").write_text(
-                json.dumps([i.__dict__ for i in found], ensure_ascii=False, indent=2),
-                encoding="utf-8",
+            import json
+            import sqlite3
+
+            # 与既有清单合并，保留处理状态
+            existing_path = config.data / "items.json"
+            merged: dict[str, dict] = {}
+            if existing_path.is_file():
+                for row in json.loads(existing_path.read_text(encoding="utf-8")):
+                    merged[f"{row['platform']}:{row['item_id']}"] = row
+            for item in found:
+                merged.setdefault(f"{item.platform}:{item.item_id}", item.__dict__)
+            existing_path.write_text(
+                json.dumps(list(merged.values()), ensure_ascii=False, indent=2), encoding="utf-8"
             )
-            log(f"采集完成：{len(found)} 条")
+            log(f"采集完成：新增 {len(found)} 条，清单共 {len(merged)} 条")
 
         ok = runner.start("collect", job)
         return JSONResponse({"started": ok})
