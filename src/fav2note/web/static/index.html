@@ -158,6 +158,7 @@
           <tbody id="items-body"><tr><td colspan="5" class="empty">还没有采集结果</td></tr></tbody>
         </table>
       </div>
+      <div class="row"><button id="btn-more-items" class="hidden">加载更多</button><span class="muted" id="items-hint"></span></div>
     </section>
 
     <!-- 笔记库 -->
@@ -168,6 +169,7 @@
           <tbody id="notes-body"><tr><td colspan="3" class="empty">还没有笔记</td></tr></tbody>
         </table>
       </div>
+      <div class="row"><button id="btn-more-notes" class="hidden">加载更多</button><span class="muted" id="notes-hint"></span></div>
     </section>
 
     <!-- 设置 -->
@@ -226,7 +228,17 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { view: "overview", running: false, selected: new Set() };
+const state = {
+  view: "overview",
+  running: false,
+  selected: new Set(JSON.parse(localStorage.getItem("fav2note:selected") || "[]")),
+  itemsShown: 100,
+  notesShown: 100,
+};
+
+function persistSelection() {
+  localStorage.setItem("fav2note:selected", JSON.stringify([...state.selected]));
+}
 
 function toast(text) {
   const el = $("toast");
@@ -315,8 +327,18 @@ $("chk-all").addEventListener("change", (event) => {
     box.checked = event.target.checked;
     event.target.checked ? state.selected.add(box.dataset.key) : state.selected.delete(box.dataset.key);
   });
+  persistSelection();
   renderActions();
 });
+
+$("btn-more-items").onclick = () => {
+  state.itemsShown += 100;
+  loadItems();
+};
+$("btn-more-notes").onclick = () => {
+  state.notesShown += 100;
+  loadNotes();
+};
 
 async function start(url, message) {
   try {
@@ -348,13 +370,16 @@ async function loadSummary() {
 }
 
 async function loadItems() {
-  const data = await api("/api/items?limit=300");
+  const data = await api("/api/items?limit=500");
   const body = $("items-body");
   if (!data.items.length) {
     body.innerHTML = '<tr><td colspan="5" class="empty">还没有采集结果</td></tr>';
+    $("items-hint").textContent = "";
+    $("btn-more-items").classList.add("hidden");
     return;
   }
-  body.innerHTML = data.items.map((item) => {
+  const shown = data.items.slice(0, state.itemsShown);
+  body.innerHTML = shown.map((item) => {
     const key = `${item.platform}:${item.item_id}`;
     const checked = state.selected.has(key) ? "checked" : "";
     return `<tr>
@@ -369,18 +394,32 @@ async function loadItems() {
   body.querySelectorAll(".chk-item").forEach((box) => {
     box.addEventListener("change", () => {
       box.checked ? state.selected.add(box.dataset.key) : state.selected.delete(box.dataset.key);
+      persistSelection();
       renderActions();
     });
   });
-  $("chk-all").checked = data.items.length > 0 && data.items.every((i) => state.selected.has(`${i.platform}:${i.item_id}`));
+
+  const allChecked = shown.length > 0 && shown.every((i) => state.selected.has(`${i.platform}:${i.item_id}`));
+  $("chk-all").checked = allChecked;
+  $("items-hint").textContent = `显示 ${shown.length} / ${data.items.length} 条`;
+  $("btn-more-items").classList.toggle("hidden", shown.length >= data.items.length);
 }
 
 async function loadNotes() {
-  const data = await api("/api/notes?limit=200");
+  const data = await api("/api/notes?limit=500");
   const body = $("notes-body");
-  body.innerHTML = data.notes.length
-    ? data.notes.map((n) => `<tr><td>${escapeHtml(n.title)}</td><td>${escapeHtml(n.platform)}</td><td>${escapeHtml(n.category)}</td></tr>`).join("")
-    : '<tr><td colspan="3" class="empty">还没有笔记</td></tr>';
+  if (!data.notes.length) {
+    body.innerHTML = '<tr><td colspan="3" class="empty">还没有笔记</td></tr>';
+    $("notes-hint").textContent = "";
+    $("btn-more-notes").classList.add("hidden");
+    return;
+  }
+  const shown = data.notes.slice(0, state.notesShown);
+  body.innerHTML = shown
+    .map((n) => `<tr><td>${escapeHtml(n.title)}</td><td>${escapeHtml(n.platform)}</td><td>${escapeHtml(n.category)}</td></tr>`)
+    .join("");
+  $("notes-hint").textContent = `显示 ${shown.length} / ${data.notes.length} 篇`;
+  $("btn-more-notes").classList.toggle("hidden", shown.length >= data.notes.length);
 }
 
 async function loadSettings() {
