@@ -21,3 +21,5 @@ Thumbs.db
 desktop/node_modules/
 dist/
 build/work/
+
+_vault_dropped/
