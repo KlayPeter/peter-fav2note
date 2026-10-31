@@ -16,7 +16,8 @@ from ..models import Item, Media
 from .base import Source
 
 FAV_URL = "https://www.douyin.com/user/self?showTab=favorite_collection"
-FAV_API = "/aweme/v1/web/aweme/favorite/"
+# 收藏列表真正的接口是 listcollection；favorite 是旧接口，保留兜底
+FAV_APIS = ("/aweme/v1/web/aweme/listcollection/", "/aweme/v1/web/aweme/favorite/")
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -73,17 +74,21 @@ class DouyinSource(Source):
     # ---- 采集 ----
     def collect(self, limit: int = 500, max_scroll: int = 200, **kwargs) -> list[Item]:
         sync_playwright = _playwright()
-        buckets: list[dict] = []
+        # 两个接口都收：listcollection 是主列表，favorite 是旧接口兜底
+        primary: list[dict] = []   # /aweme/listcollection/
+        secondary: list[dict] = []  # /aweme/favorite/
 
         def on_response(response):
-            if FAV_API not in response.url:
+            url = response.url
+            if not any(api in url for api in FAV_APIS):
                 return
             try:
                 data = response.json()
             except Exception:  # noqa: BLE001
                 return
+            bucket = primary if FAV_APIS[0] in url else secondary
             for aweme in data.get("aweme_list") or []:
-                buckets.append(aweme)
+                bucket.append(aweme)
 
         with sync_playwright() as pw:
             context = pw.chromium.launch_persistent_context(
@@ -106,16 +111,20 @@ class DouyinSource(Source):
                     same += 1
                 else:
                     same, last_height = 0, height
-                if same >= 6 or len(buckets) >= limit:
+                if same >= 6 or len(primary) + len(secondary) >= limit:
                     break
 
             logged_in = "sessionid" in {c.get("name") for c in context.cookies()}
             context.close()
 
-        if not buckets and not logged_in:
+        if not primary and not secondary and not logged_in:
             raise RuntimeError("抖音登录态已失效，请重新执行：fav2note login --source douyin")
 
-        return [self._to_item(aweme) for aweme in self._dedupe(buckets)]
+        # 主列表优先保序，旧接口的条目补在后面，按 aweme_id 去重
+        merged = self._dedupe(primary + secondary)
+        if secondary:
+            print(f"    收藏接口：主列表 {len(primary)} 条，旧接口 {len(secondary)} 条，去重后 {len(merged)} 条")
+        return [self._to_item(aweme) for aweme in merged]
 
     @staticmethod
     def _dedupe(awemes: list[dict]) -> list[dict]:
