@@ -86,10 +86,22 @@ class Transcriber:
 
         model = self._load()
         audio = load_wav(wav)
-        segments, _info = model.transcribe(
-            audio, language="zh", beam_size=5, vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 500},
-        )
+        try:
+            result, _info = model.transcribe(
+                audio, language="zh", beam_size=5, vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 500},
+            )
+            segments = list(result)
+        except Exception as error:  # noqa: BLE001  GPU 缺库时退回 CPU 再跑一次
+            print(f"    [i] GPU 转写失败（{error}），改用 CPU 重试")
+            from faster_whisper import WhisperModel
+
+            self._model = WhisperModel(self.config.asr_model, device="cpu", compute_type="int8")
+            result, _info = self._model.transcribe(
+                audio, language="zh", beam_size=5, vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 500},
+            )
+            segments = list(result)
 
         rows: list[tuple[int, str]] = []
         srt_lines: list[str] = []

@@ -46,33 +46,58 @@ copy .env.example .env             # 填 API Key
 
 ## 用法
 
-### 小红书
+一条主线，两个平台都走同一套。
 
-1. 浏览器登录小红书，打开收藏页
-2. 安装 `userscript/xhs-favorites-export.user.js`（Tampermonkey），点「开始滚动」
-3. 导出得到 `fav_all.json`
+### 1. 准备登录态
+
+**小红书**：浏览器登录 → 收藏页 → 油猴脚本 `userscript/xhs-favorites-export.user.js` → 点「开始滚动」→ 保存 `fav_all.json` 到 `inbox/`。
+
+**抖音**：扫码一次，登录态存本地 profile，几周内不用再扫。
 
 ```bash
-fav2note collect --source xhs --file fav_all.json --home .
-fav2note run --limit 20
+fav2note login --source douyin
 ```
 
-### 抖音
+### 2. 采集
 
 ```bash
-fav2note login --source douyin     # 弹出浏览器，扫码，回车保存
-fav2note collect --source douyin --limit 200
-fav2note run --limit 20
+fav2note collect                 # 两个平台一起，默认
+fav2note collect --source xhs    # 只采小红书
+fav2note collect --source douyin # 只采抖音
 ```
 
-登录态存在 `data/cache/douyin_profile/`，不会读取或上传 Cookie。
+结果合并进 `data/items.json`，已处理过的不会被清掉。
 
-### 其他
+### 3. 处理
 
 ```bash
-fav2note web                # 浏览器面板：http://127.0.0.1:7788
-fav2note link               # 只重建笔记关联
-fav2note stats              # 看处理统计
+fav2note run --limit 20     # 下载 → 转写 → 提炼 → 入库 → 建链
+```
+
+每条都会：下视频 → ffmpeg 抽音轨 → whisper 转写 → LLM 分节提炼 → 按分节截帧 → 写成 Markdown。
+
+### 4. 常驻（可选）
+
+```bash
+fav2note daemon --interval 3600 --batch 20
+```
+
+每小时自动采集一次，再处理 20 条。想开机自启，用 Windows 计划任务指向这条命令即可。
+
+### 5. 看结果
+
+```bash
+fav2note web      # 面板：http://127.0.0.1:7788
+fav2note stats    # 命令行统计
+```
+
+知识库在 `vault/`，Obsidian「打开本地仓库」选这个目录就能用。
+
+### 其他命令
+
+```bash
+fav2note link     # 只重建笔记关联
+fav2note stats    # 看处理统计
 ```
 
 ## 桌面端
