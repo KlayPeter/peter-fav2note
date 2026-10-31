@@ -266,6 +266,25 @@
   <div class="modal-box">
     <h3 id="modal-title">采集设置</h3>
     <p>勾选要排除的类型，命中标题的条目会直接标为 drop，不进入处理队列。</p>
+
+    <div class="field" style="padding:0 0 10px;border:none">
+      <label style="width:72px;flex:0 0 72px">采集范围</label>
+      <div style="flex:1">
+        <div class="row">
+          <label style="display:flex;gap:6px;align-items:center"><input type="radio" name="scope" value="all" checked /> 全量</label>
+          <label style="display:flex;gap:6px;align-items:center;margin-left:12px"><input type="radio" name="scope" value="recent" /> 最近</label>
+          <input type="number" id="f-scope-n" value="100" min="1" max="1000" style="max-width:90px" />
+          <span class="muted">条</span>
+        </div>
+        <div class="desc" id="scope-hint">当前清单：—</div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:8px">
+      <button id="btn-tag-all" style="font-size:12px;padding:3px 10px">全选</button>
+      <button id="btn-tag-none" style="font-size:12px;padding:3px 10px">全不选</button>
+      <span class="muted" style="font-size:12px">共 <span id="tag-count">0</span> 个排除标签</span>
+    </div>
     <div class="tags" id="tag-list"></div>
     <textarea id="f-prompt" placeholder="补充提示词（可选）：例如「排除纯口播鸡汤，保留有具体步骤和参数的」"></textarea>
     <div class="modal-foot">
@@ -386,7 +405,7 @@ async function startSelected() {
 
 async function openCollectModal(source) {
   try {
-    const data = await api("/api/filters");
+    const [data, stats] = await Promise.all([api("/api/filters"), api("/api/stats")]);
     const list = $("tag-list");
     list.innerHTML = data.all_tags
       .map((tag) => {
@@ -397,14 +416,35 @@ async function openCollectModal(source) {
     list.querySelectorAll("input").forEach((box) => {
       box.addEventListener("change", () => box.parentElement.classList.toggle("on", box.checked));
     });
+    $("tag-count").textContent = data.all_tags.length;
     $("f-prompt").value = data.prompt || "";
-    $("modal-title").textContent = (source === "xhs" ? "采集小红书" : "采集抖音") + " · 排除设置";
+
+    const platforms = stats.platforms || {};
+    const parts = ["小红书", "抖音"]
+      .filter((name) => platforms[name])
+      .map((name) => `${name} ${platforms[name].total} 条（待处理 ${platforms[name].pending}）`);
+    $("scope-hint").textContent = parts.length ? "当前清单：" + parts.join("　·　") : "当前清单为空，先采集一次";
+
+    $("modal-title").textContent = (source === "xhs" ? "采集小红书" : "采集抖音") + " · 采集设置";
     $("collect-modal").dataset.source = source;
     $("collect-modal").classList.remove("hidden");
   } catch (e) {
-    toast("读取排除设置失败：" + e.message);
+    toast("读取设置失败：" + e.message);
   }
 }
+
+$("btn-tag-all").onclick = () => {
+  document.querySelectorAll("#tag-list input").forEach((box) => {
+    box.checked = true;
+    box.parentElement.classList.add("on");
+  });
+};
+$("btn-tag-none").onclick = () => {
+  document.querySelectorAll("#tag-list input").forEach((box) => {
+    box.checked = false;
+    box.parentElement.classList.remove("on");
+  });
+};
 
 $("btn-cancel").onclick = () => $("collect-modal").classList.add("hidden");
 
@@ -412,9 +452,11 @@ $("btn-ok").onclick = async () => {
   const tags = [...document.querySelectorAll("#tag-list input:checked")].map((box) => box.value);
   const prompt = $("f-prompt").value.trim();
   const source = $("collect-modal").dataset.source || "douyin";
+  const scope = document.querySelector('input[name="scope"]:checked').value;
+  const limit = scope === "all" ? 0 : Number($("f-scope-n").value) || 100;
   $("collect-modal").classList.add("hidden");
   try {
-    await api(`/api/collect?source=${source}&limit=100`, {
+    await api(`/api/collect?source=${source}&limit=${limit}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tags, prompt }),

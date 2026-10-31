@@ -242,6 +242,7 @@ def create_app(config: Config) -> FastAPI:
 
     @app.post("/api/collect")
     def collect(source: str = "both", limit: int = 100, payload: dict | None = None) -> JSONResponse:
+        limit = 100000 if limit <= 0 else limit  # 0 表示全量
         from ..sources.douyin import DouyinSource
         from ..sources.xiaohongshu import XiaohongshuSource
 
@@ -507,6 +508,22 @@ def create_app(config: Config) -> FastAPI:
         config.frames_min = int(updates["FAV2NOTE_FRAMES_MIN"])
         config.frames_max = int(updates["FAV2NOTE_FRAMES_MAX"])
         return {"saved": True}
+
+    @app.get("/api/stats")
+    def stats() -> dict:
+        """清单按平台统计：总数与待处理数。"""
+        path = config.data / "items.json"
+        rows = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
+        store = state()
+        result: dict[str, dict] = {}
+        for row in rows:
+            name = row.get("platform", "未知")
+            key = f"{name}:{row.get('item_id')}"
+            bucket = result.setdefault(name, {"total": 0, "pending": 0})
+            bucket["total"] += 1
+            if store.status(key) != "done":
+                bucket["pending"] += 1
+        return {"platforms": result}
 
     @app.get("/api/filters")
     def get_filters() -> dict:

@@ -36,11 +36,13 @@ TAG_RULES: dict[str, str] = {
 
 DEFAULT_TAGS = list(TAG_RULES)
 
+DEFAULT_PROMPT = "排除纯口播鸡汤、没有具体信息量的内容；优先保留有步骤、参数、工具名或判断标准的干货。"
+
 
 class Filters:
     def __init__(self, path: Path) -> None:
         self.path = path
-        self.data = {"tags": DEFAULT_TAGS, "prompt": ""}
+        self.data = {"tags": DEFAULT_TAGS, "prompt": DEFAULT_PROMPT}
         if path.is_file():
             try:
                 self.data.update(json.loads(path.read_text(encoding="utf-8")))
